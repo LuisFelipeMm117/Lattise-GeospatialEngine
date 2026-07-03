@@ -1,0 +1,79 @@
+indice,scian,nombre
+0,111,Agricultura
+1,112,Cría y explotación de animales
+2,113,Aprovechamiento forestal
+3,114,"Pesca, caza y captura"
+4,115,Servicios relacionados con las actividades agropecuarias y forestales
+5,211,Extracción de petróleo y gas
+6,212,"Minería de minerales metálicos y no metálicos, excepto petróleo y gas"
+7,213,Servicios relacionados con la minería
+8,221,"Generación, transmisión, distribución y comercialización de energía eléctrica, suministro de agua y de gas natural por ductos al consumidor final"
+9,236,Edificación
+10,237,Construcción de obras de ingeniería civil
+11,238,Trabajos especializados para la construcción
+12,311,Industria alimentaria
+13,312,Industria de las bebidas y del tabaco
+14,313,Fabricación de insumos textiles y acabado de textiles
+15,314,"Fabricación de productos textiles, excepto prendas de vestir"
+16,315,Fabricación de prendas de vestir
+17,316,"Curtido y acabado de cuero y piel, y fabricación de productos de cuero, piel y materiales sucedáneos"
+18,321,Industria de la madera
+19,322,Industria del papel
+20,323,Impresión e industrias conexas
+21,324,Fabricación de productos derivados del petróleo y del carbón
+22,325,Industria química
+23,326,Industria del plástico y del hule
+24,327,Fabricación de productos a base de minerales no metálicos
+25,331,Industrias metálicas básicas
+26,332,Fabricación de productos metálicos
+27,333,Fabricación de maquinaria y equipo
+28,334,"Fabricación de equipo de computación, comunicación, medición y de otros equipos, componentes y accesorios electrónicos"
+29,335,"Fabricación de accesorios, aparatos eléctricos y equipo de generación de energía eléctrica"
+30,336,Fabricación de equipo de transporte
+31,337,"Fabricación de muebles, colchones y persianas"
+32,339,Otras industrias manufactureras
+33,431,"Comercio al por mayor de abarrotes, alimentos, bebidas, hielo y tabaco"
+34,461,"Comercio al por menor de abarrotes, alimentos, bebidas, hielo y tabaco"
+35,481,Transporte aéreo
+36,482,Transporte por ferrocarril
+37,483,Transporte por agua
+38,484,Autotransporte de carga
+39,485,"Transporte terrestre de pasajeros, excepto por ferrocarril"
+40,486,Transporte por ductos
+41,487,Transporte turístico
+42,488,Servicios relacionados con el transporte
+43,491,Servicios postales
+44,492,Servicios de mensajería y paquetería
+45,493,Servicios de almacenamiento
+46,511,"Edición de periódicos, revistas, libros, software y otros materiales, y edición de estas publicaciones integrada con la impresión"
+47,512,"Industria fílmica y del video, e industria del sonido"
+48,515,Radio y televisión
+49,517,Telecomunicaciones
+50,518,"Procesamiento electrónico de información, hospedaje y otros servicios relacionados"
+51,519,Otros servicios de información
+52,521,Banca central
+53,522,Instituciones de intermediación crediticia y financiera no bursátil
+54,523,"Actividades bursátiles, cambiarias y de inversión financiera"
+55,524,"Compañías de seguros, fianzas, y administración de fondos para el retiro"
+56,531,Servicios inmobiliarios
+57,532,Servicios de alquiler de bienes muebles
+58,533,"Servicios de alquiler de marcas registradas, patentes y franquicias"
+59,541,"Servicios profesionales, científicos y técnicos"
+60,551,Corporativos
+61,561,Servicios de apoyo a los negocios
+62,562,Manejo de residuos y servicios de remediación
+63,611,Servicios educativos
+64,621,Servicios médicos de consulta externa y servicios relacionados
+65,622,Hospitales
+66,623,Residencias de asistencia social y para el cuidado de la salud
+67,624,Otros servicios de asistencia social
+68,711,"Servicios artísticos, culturales y deportivos, y otros servicios relacionados"
+69,712,"Museos, sitios históricos, zoológicos y similares"
+70,713,Servicios de entretenimiento en instalaciones recreativas y otros servicios recreativos
+71,721,Servicios de alojamiento temporal
+72,722,Servicios de preparación de alimentos y bebidas
+73,811,Servicios de reparación y mantenimiento
+74,812,Servicios personales
+75,813,Asociaciones y organizaciones
+76,814,Hogares con empleados domésticos
+77,931,"Actividades legislativas, gubernamentales y de impartición de justicia"
