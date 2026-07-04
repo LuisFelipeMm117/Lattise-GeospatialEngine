@@ -36,3 +36,13 @@ QUALITY_REPORT_JSON = QA_DIR / "quality_report.json"
 
 # ── Columna identificadora de AGEB (INEGI Marco Geoestadístico) ────────────
 AGEB_ID_COL = "cvegeo"
+
+# ── Crosswalk SCIAN → SERIO (activo de datos, autoría jerárquica) ──────────
+# Ver spatial/warehouse/crosswalk.py — arquitectura:
+#     Autoría jerárquica → Validación → Compilación → Lookup plano → WarehouseBuilder
+CROSSWALK_DIR           = DATA_DIR / "crosswalk"
+CROSSWALK_AUTHORING_CSV = CROSSWALK_DIR / "crosswalk_autoria_scian_serio.csv"
+CROSSWALK_COMPILED_CSV  = CROSSWALK_DIR / "crosswalk_scian_serio.csv"      # único artefacto que consume WarehouseBuilder
+CROSSWALK_REPORT_JSON   = CROSSWALK_DIR / "crosswalk_report.json"
+
+CROSSWALK_DIR.mkdir(parents=True, exist_ok=True)
