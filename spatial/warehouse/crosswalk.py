@@ -909,6 +909,32 @@ class CrosswalkBuilder:
         return compiled
 
     # ════════════════════════════════════════════════════════════════════
+    # ETAPA 4b — PERSISTENCIA DEL ARTEFACTO COMPILADO
+    # ════════════════════════════════════════════════════════════════════
+    def save_compiled_lookup(self, compiled_df: pd.DataFrame, path: str | Path) -> Path:
+        """
+        Persiste el `DataFrame` devuelto por `compile_to_flat_lookup()` en
+        `path` (típicamente `spatial.config.CROSSWALK_COMPILED_CSV`) con
+        exactamente `CROSSWALK_SCHEMA`. Es el único paso de escritura a
+        disco que le faltaba al puente hacia el contrato existente —
+        separado de `compile_to_flat_lookup()` a propósito, para que
+        compilar en memoria (p.ej. en pruebas) y persistir a disco sigan
+        siendo dos decisiones independientes, igual que
+        `validate()`/`filter_valid()` en el resto del pipeline.
+        """
+        cols = list(compiled_df.columns)
+        if cols != CROSSWALK_SCHEMA:
+            raise ValueError(
+                f"save_compiled_lookup() espera exactamente CROSSWALK_SCHEMA {CROSSWALK_SCHEMA}; "
+                f"recibido {cols}. Pasa el resultado de compile_to_flat_lookup() sin modificar."
+            )
+        path = Path(path)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        compiled_df.to_csv(path, index=False)
+        logger.info("Crosswalk compilado persistido: %s (%d filas).", path, len(compiled_df))
+        return path
+
+    # ════════════════════════════════════════════════════════════════════
     # ETAPA 5 — MÉTRICAS Y REPORTE DE COBERTURA (Fases 6–7 ampliadas)
     # ════════════════════════════════════════════════════════════════════
     def build_coverage_report(

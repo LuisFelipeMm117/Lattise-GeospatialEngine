@@ -41,8 +41,29 @@ AGEB_ID_COL = "cvegeo"
 # Ver spatial/warehouse/crosswalk.py — arquitectura:
 #     Autoría jerárquica → Validación → Compilación → Lookup plano → WarehouseBuilder
 CROSSWALK_DIR           = DATA_DIR / "crosswalk"
-CROSSWALK_AUTHORING_CSV = CROSSWALK_DIR / "crosswalk_autoria_scian_serio.csv"
+CROSSWALK_RAW_DIR        = CROSSWALK_DIR / "raw"          # insumo inmutable (Crosswalk Maestro v0.x tal cual se entrega)
+CROSSWALK_AUTHORING_CSV = CROSSWALK_DIR / "crosswalk_autoria_scian_serio.csv"  # activo editable — AUTHORING_SCHEMA
 CROSSWALK_COMPILED_CSV  = CROSSWALK_DIR / "crosswalk_scian_serio.csv"      # único artefacto que consume WarehouseBuilder
 CROSSWALK_REPORT_JSON   = CROSSWALK_DIR / "crosswalk_report.json"
 
-CROSSWALK_DIR.mkdir(parents=True, exist_ok=True)
+# Crosswalk Maestro v0.1 — insumo crudo tal como lo entrega el equipo de
+# autoría (esquema propio por criterio económico: nivel/código/descripción/
+# sector_serio/confianza/requiere_revision/justificación). Se migra a
+# AUTHORING_SCHEMA vía spatial.warehouse.crosswalk_maestro antes de entrar
+# al pipeline oficial (ver scripts/build_crosswalk_maestro.py). Nunca se
+# edita in situ: es un snapshot versionado, igual que RAW_DIR (Stage 1).
+CROSSWALK_MASTER_RAW_CSV = CROSSWALK_RAW_DIR / "Crosswalk_Maestro_SCIAN_SERIO_v0.1.csv"
+
+# Catálogo de los 78 sectores SERIO (código, nombre) — universo S y fuente
+# de la resolución nombre → código usada por la migración del Crosswalk Maestro.
+SERIO_SECTORES_CSV = BASE_DIR / "serio" / "data" / "sectores.csv"
+
+for _d in (CROSSWALK_DIR, CROSSWALK_RAW_DIR):
+    _d.mkdir(parents=True, exist_ok=True)
+
+# ── Versionamiento del activo de datos (AUTHORING_SCHEMA) ──────────────────
+# Single Source of Truth para las columnas *_version que viajan en cada fila
+# de autoría — evita que cada script/caller repita estos literales.
+CROSSWALK_VERSION = "v0.1"
+SCIAN_VERSION      = "SCIAN-2018 (base SERIO); estructura verificada contra fixture INEGI SCIAN-2023 — ver README de spatial/warehouse"
+SERIO_VERSION      = "SERIO-78-2018"
