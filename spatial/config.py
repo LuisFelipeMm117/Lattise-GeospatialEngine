@@ -24,15 +24,18 @@ INTEGRATED_DIR = DATA_DIR / "integrated"   # Stage 4 — post Spatial Join (g, s
 WAREHOUSE_DIR  = DATA_DIR / "warehouse"    # Stage 5 — warehouse.parquet + metadata.json
 QA_DIR         = DATA_DIR / "qa"           # Stage 6 — quality_report.json/pdf
 SSD_DIR        = DATA_DIR / "ssd"          # Stage 7 — shock_ageb.parquet
+GRAPH_DIR      = DATA_DIR / "graph"        # Spatial Graph Builder — matriz M (independiente del SEW)
 
 for _d in (RAW_DIR, VALIDATED_DIR, NORMALIZED_DIR, INTEGRATED_DIR,
-           WAREHOUSE_DIR, QA_DIR, SSD_DIR):
+           WAREHOUSE_DIR, QA_DIR, SSD_DIR, GRAPH_DIR):
     _d.mkdir(parents=True, exist_ok=True)
 
 # ── Nombres de archivo estándar ─────────────────────────────────────────────
 WAREHOUSE_PARQUET = WAREHOUSE_DIR / "warehouse.parquet"
 WAREHOUSE_METADATA = WAREHOUSE_DIR / "metadata.json"
 QUALITY_REPORT_JSON = QA_DIR / "quality_report.json"
+GRAPH_GAL_PATH      = GRAPH_DIR / "graph.gal"
+GRAPH_METADATA_JSON = GRAPH_DIR / "graph_metadata.json"
 
 # ── Columna identificadora de AGEB (INEGI Marco Geoestadístico) ────────────
 AGEB_ID_COL = "cvegeo"
