@@ -6,10 +6,12 @@ Orquesta exclusivamente las APIs públicas ya cerradas del motor:
     spatial.simulation.engine.run_simulation_engine()
 No recalcula Warehouse, Graph, SEE ni SERIO. No contiene lógica económica.
 """
+import json
 import sys
 import time
 from pathlib import Path
 
+import plotly.express as px
 import streamlit as st
 
 # ── Resolución de rutas del repo (app/pages/ → app/ → repo root) ───────────
@@ -18,7 +20,13 @@ if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
 
 from serio.loader import ModeloEconomico
-from spatial.simulation.engine import run_simulation_engine
+from spatial.config import AGEB_ID_COL
+from spatial.simulation.engine import (
+    IMPACTO_DIRECTO_COL,
+    IMPACTO_INDIRECTO_COL,
+    IMPACTO_PROPAGADO_COL,
+    run_simulation_engine,
+)
 
 st.set_page_config(
     page_title="Run Simulation — Lattise Studio",
@@ -171,6 +179,13 @@ div[data-testid="stButton"] > button[kind="primary"]:hover {
     font-size: 13px;
     background: rgba(255,255,255,0.015);
 }
+.map-card {
+    margin-top: 16px;
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 10px 10px 2px 10px;
+    background: rgba(255,255,255,0.015);
+}
 
 .summary-row {
     display: flex;
@@ -274,6 +289,67 @@ with col_left:
 with col_right:
     preview_slot = st.container()
 
+def _render_map(gdf):
+    """Mapa interactivo del GeoDataFrame producido por run_simulation_engine().
+    Solo lectura/visualización — no transforma ni recalcula columnas."""
+    gdf_map = gdf[gdf.geometry.notna()].copy()
+    n_sin_geom = len(gdf) - len(gdf_map)
+
+    if gdf_map.empty:
+        st.markdown(
+            '<div class="map-placeholder">No spatial geometry available for this result.</div>',
+            unsafe_allow_html=True,
+        )
+        return
+
+    try:
+        gdf_wgs84 = gdf_map.to_crs(epsg=4326)
+    except Exception:
+        gdf_wgs84 = gdf_map
+
+    geojson = json.loads(gdf_wgs84.to_json())
+    centroid = gdf_wgs84.geometry.unary_union.centroid
+
+    fig = px.choropleth_mapbox(
+        gdf_wgs84,
+        geojson=geojson,
+        locations=gdf_wgs84.index,
+        color=IMPACTO_PROPAGADO_COL,
+        color_continuous_scale="Blues",
+        mapbox_style="carto-darkmatter",
+        zoom=8,
+        center={"lat": centroid.y, "lon": centroid.x},
+        opacity=0.75,
+        hover_name=AGEB_ID_COL,
+        hover_data={
+            IMPACTO_PROPAGADO_COL: ":.2f",
+            IMPACTO_DIRECTO_COL: ":.2f",
+            IMPACTO_INDIRECTO_COL: ":.2f",
+        },
+        labels={
+            IMPACTO_PROPAGADO_COL: "Propagated impact",
+            IMPACTO_DIRECTO_COL: "Direct impact",
+            IMPACTO_INDIRECTO_COL: "Indirect impact",
+        },
+    )
+    fig.update_layout(
+        margin=dict(l=0, r=0, t=0, b=0),
+        height=340,
+        paper_bgcolor="#131A26",
+        font=dict(family="Inter", color="#F4F5F7", size=11),
+        coloraxis_colorbar=dict(
+            title="Propagated<br>impact",
+            tickfont=dict(color="#8A93A6"),
+            title_font=dict(color="#8A93A6"),
+        ),
+    )
+    st.markdown('<div class="map-card">', unsafe_allow_html=True)
+    st.plotly_chart(fig, use_container_width=True, config={"scrollZoom": True})
+    st.markdown('</div>', unsafe_allow_html=True)
+
+    if n_sin_geom > 0:
+        st.caption(f"⚠ {n_sin_geom} AGEB(s) sin geometría, excluida(s) del mapa.")
+
 def render_preview_empty():
     with preview_slot:
         st.markdown("""
@@ -284,7 +360,7 @@ def render_preview_empty():
         </div>
         """, unsafe_allow_html=True)
 
-def render_preview_result(report):
+def render_preview_result(report, gdf):
     with preview_slot:
         st.markdown('<div class="panel-title">Simulation Preview</div>', unsafe_allow_html=True)
         st.success("Simulation completed successfully.")
@@ -301,10 +377,7 @@ def render_preview_result(report):
         m3.metric("Multiplicador Espacial", mult_txt)
         m4.metric("Tiempo de Ejecución", f"{report.tiempo_ejecucion_seg:.3f} s")
 
-        st.markdown(
-            '<div class="map-placeholder">Spatial visualization will appear here.</div>',
-            unsafe_allow_html=True,
-        )
+        _render_map(gdf)
 
 # ══════════════════════════════════════════════════════════
 # EJECUCIÓN — API pública existente, sin recálculo de etapas
@@ -332,8 +405,8 @@ if launch:
                 st.markdown('<div class="panel-title">Simulation Preview</div>', unsafe_allow_html=True)
                 st.error(f"Simulation failed: {e}")
         else:
-            render_preview_result(report)
-elif "simulation_report" in st.session_state:
-    render_preview_result(st.session_state["simulation_report"])
+            render_preview_result(report, gdf_final)
+elif "simulation_report" in st.session_state and "simulation_gdf" in st.session_state:
+    render_preview_result(st.session_state["simulation_report"], st.session_state["simulation_gdf"])
 else:
     render_preview_empty()
