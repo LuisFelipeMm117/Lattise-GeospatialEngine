@@ -19,6 +19,7 @@ los datos. Todo dato mostrado en KPIs, insights y rankings ya existía en
 import io
 import json
 import sys
+import textwrap
 import time
 from pathlib import Path
 
@@ -410,6 +411,17 @@ def _municipio_code(cvegeo: str) -> str:
     return cvegeo[2:5] if len(cvegeo) >= 5 else "—"
 
 
+def _md(html: str) -> None:
+    """st.markdown envuelto con textwrap.dedent().strip().
+
+    Streamlit interpreta bloques indentados con 4+ espacios como código
+    Markdown (```) en vez de HTML crudo. Como los f-strings HTML de esta
+    página viven dentro de funciones/loops indentados, sin dedent el HTML
+    se renderiza como texto plano en vez de como interfaz. Este helper es
+    puramente de presentación — no toca ningún dato ni columna del motor."""
+    st.markdown(textwrap.dedent(html).strip(), unsafe_allow_html=True)
+
+
 # Columnas de impacto ya producidas por el motor — solo se eligen para
 # visualización, no se derivan valores nuevos.
 _VARIABLE_OPTIONS = {
@@ -486,14 +498,14 @@ with t5:
     st.markdown('<div style="height:26px;"></div>', unsafe_allow_html=True)
     launch = st.button("▶ Launch", type="primary", use_container_width=True)
 
-st.markdown(f"""
+_md(f"""
 <div class="chip-row">
     <span class="chip accent">📍 <b>Region</b>{estado_nombre}</span>
     <span class="chip accent">🏭 <b>Sector</b>{sector_name}</span>
     <span class="chip accent">💰 <b>Shock</b>{format_money(monto_pesos)}</span>
     <span class="chip accent">🌊 <b>ρ</b>{rho:.2f}</span>
 </div>
-""", unsafe_allow_html=True)
+""")
 st.markdown('</div>', unsafe_allow_html=True)
 
 
@@ -609,7 +621,7 @@ def render_map_block(gdf, sector_label: str):
     vmin = float(gdf_wgs84[value_col].min())
     vmax = float(gdf_wgs84[value_col].max())
 
-    st.markdown(f"""
+    _md(f"""
     <div class="floating-legend-wrap" style="margin-top:-660px;">
       <div class="floating-legend">
         <div class="lg-title">Legend · {var_label}</div>
@@ -618,7 +630,7 @@ def render_map_block(gdf, sector_label: str):
       </div>
     </div>
     <div class="fullscreen-chip" style="margin-top:-40px;">⛶ Fullscreen · scroll to zoom</div>
-    """, unsafe_allow_html=True)
+    """)
 
     st.markdown('</div>', unsafe_allow_html=True)
 
@@ -643,14 +655,14 @@ def render_result(report, gdf, scenario: dict):
     )
 
     # ── 1. Executive Summary (≤4 líneas) ─────────────────────────────
-    st.markdown(f"""
+    _md(f"""
     <div class="exec-summary">
     A <strong>{format_money(monto_label)}</strong> shock in <strong>{sector_label}</strong>
     ({estado_label}) propagates to <strong>{format_money(report.shock_total_propagado)}</strong>
     in spatial economic impact — a <strong>{mult_txt}</strong> multiplier — across the AGEB
     network at ρ = {rho_label:.2f}, computed in {report.tiempo_ejecucion_seg:.2f}s.
     </div>
-    """, unsafe_allow_html=True)
+    """)
 
     # ── 2. Spatial Map ────────────────────────────────────────────────
     st.markdown('<div class="section-label">Spatial Map</div>', unsafe_allow_html=True)
@@ -663,7 +675,7 @@ def render_result(report, gdf, scenario: dict):
     impacto_promedio = float(gdf[IMPACTO_PROPAGADO_COL].mean()) if n_agebs else 0.0
     impacto_maximo = float(gdf[IMPACTO_PROPAGADO_COL].max()) if n_agebs else 0.0
 
-    st.markdown(f"""
+    _md(f"""
     <div class="kpi-strip">
         <div class="kpi-item">
             <div class="kpi-label">Direct Impact</div>
@@ -686,7 +698,7 @@ def render_result(report, gdf, scenario: dict):
             <div class="kpi-value">{report.tiempo_ejecucion_seg:.2f}s</div>
         </div>
     </div>
-    """, unsafe_allow_html=True)
+    """)
 
     # ── 4. Spatial Insights ───────────────────────────────────────────
     st.markdown('<div class="section-label">Spatial Insights</div>', unsafe_allow_html=True)
@@ -698,7 +710,7 @@ def render_result(report, gdf, scenario: dict):
         top_row = gdf_map.sort_values(value_col, ascending=False).iloc[0]
         n_municipios = gdf_map["municipio"].nunique()
 
-        st.markdown(f"""
+        _md(f"""
         <div>
             <div class="insight-line"><span class="dot-sm"></span>
                 Top 10 AGEBs concentrate <strong>{top10_share:.1f}%</strong> of total {var_label.lower()}.
@@ -716,7 +728,7 @@ def render_result(report, gdf, scenario: dict):
                 Maximum: <strong>{format_money(impacto_maximo)}</strong>.
             </div>
         </div>
-        """, unsafe_allow_html=True)
+        """)
     else:
         st.caption("No geometry available to compute spatial insights.")
 
@@ -732,22 +744,31 @@ def render_result(report, gdf, scenario: dict):
         )
         max_val = float(df_rank[value_col].abs().max()) or 1.0
 
-        rows_html = ""
+        # NOTA: cada fila se arma como una sola línea, sin saltos ni
+        # indentación. Un f-string HTML multilínea indentado dentro de un
+        # loop es interpretado por Streamlit como bloque de código Markdown
+        # (4+ espacios ⇒ ``` ) en vez de HTML, que es la causa del bug
+        # reportado ("no renderiza, se ve el HTML crudo"). Concatenando en
+        # una sola línea se evita el problema de raíz — sin tocar ningún
+        # valor del motor.
+        rows_html = []
         for i, row in df_rank.iterrows():
             pct = min(100.0, abs(float(row[value_col])) / max_val * 100)
-            rows_html += f"""
-            <div class="rank-item">
-                <div class="rank-num">#{i+1:02d}</div>
-                <div class="rank-body">
-                    <div class="rank-name">
-                        <span>AGEB {row[AGEB_ID_COL]} <span class="rank-muni">· municipio {row['municipio']}</span></span>
-                    </div>
-                    <div class="rank-bar-track"><div class="rank-bar-fill" style="width:{pct:.1f}%;"></div></div>
-                </div>
-                <div class="rank-value">{format_compact(row[value_col])}</div>
-            </div>
-            """
-        st.markdown(f'<div>{rows_html}</div>', unsafe_allow_html=True)
+            rows_html.append(
+                '<div class="rank-item">'
+                f'<div class="rank-num">#{i + 1:02d}</div>'
+                '<div class="rank-body">'
+                '<div class="rank-name"><span>AGEB '
+                f'{row[AGEB_ID_COL]} '
+                f'<span class="rank-muni">· municipio {row["municipio"]}</span></span></div>'
+                '<div class="rank-bar-track">'
+                f'<div class="rank-bar-fill" style="width:{pct:.1f}%;"></div>'
+                '</div>'
+                '</div>'
+                f'<div class="rank-value">{format_compact(row[value_col])}</div>'
+                '</div>'
+            )
+        st.markdown(f'<div>{"".join(rows_html)}</div>', unsafe_allow_html=True)
     else:
         st.caption("No geometry available to build the ranking.")
 
@@ -790,13 +811,13 @@ def render_result(report, gdf, scenario: dict):
 
 
 def render_empty_state():
-    st.markdown("""
+    _md("""
     <div class="exec-summary">
     Define a scenario in the toolbar above and press <strong>Launch</strong> to run the
     spatial propagation engine. Results — map, KPIs, insights, rankings and exports —
     will appear here once the simulation completes.
     </div>
-    """, unsafe_allow_html=True)
+    """)
     st.markdown('<div class="section-label">Spatial Map</div>', unsafe_allow_html=True)
     st.markdown(
         '<div class="map-placeholder">Spatial visualization will appear here once a '
