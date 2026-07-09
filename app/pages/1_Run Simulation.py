@@ -448,6 +448,9 @@ modelo = cargar_modelo()
 
 _has_result = "simulation_report" in st.session_state and "simulation_gdf" in st.session_state
 
+if "selected_ageb_id" not in st.session_state:
+    st.session_state["selected_ageb_id"] = None
+
 # ══════════════════════════════════════════════════════════
 # HEADER
 # ══════════════════════════════════════════════════════════
@@ -607,7 +610,21 @@ def render_map_block(gdf, sector_label: str):
     )
 
     st.markdown('<div class="map-card">', unsafe_allow_html=True)
-    st.plotly_chart(fig, use_container_width=True, config={"scrollZoom": True, "displaylogo": False})
+    map_event = st.plotly_chart(
+        fig,
+        use_container_width=True,
+        config={"scrollZoom": True, "displaylogo": False},
+        on_select="rerun",
+        selection_mode=("points",),
+        key="spatial_map_chart",
+    )
+
+    # ── Selección por click — solo lectura de columnas ya existentes en
+    # gdf_wgs84 (producidas por el motor). No se infiere ni recalcula nada.
+    if map_event and map_event.get("selection", {}).get("point_indices"):
+        idx_sel = map_event["selection"]["point_indices"][0]
+        if 0 <= idx_sel < len(gdf_wgs84):
+            st.session_state["selected_ageb_id"] = str(gdf_wgs84.iloc[idx_sel][AGEB_ID_COL])
 
     # ── Leyenda flotante + chip de fullscreen (overlay sobre el mapa) ──
     grad_css = {
