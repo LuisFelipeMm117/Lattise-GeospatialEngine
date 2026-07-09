@@ -5,7 +5,18 @@ Orquesta exclusivamente las APIs públicas ya cerradas del motor:
     serio.loader.ModeloEconomico.simular()
     spatial.simulation.engine.run_simulation_engine()
 No recalcula Warehouse, Graph, SEE ni SERIO. No contiene lógica económica.
+
+Sprint UX/UI — GIS profesional (ArcGIS Pro / CARTO / Palantir Foundry):
+Todo lo agregado en este sprint es presentación pura sobre columnas ya
+producidas por el motor (IMPACTO_DIRECTO_COL, IMPACTO_INDIRECTO_COL,
+IMPACTO_PROPAGADO_COL, geometry). No se recalcula, reinterpreta ni agrega
+ninguna magnitud económica nueva. Los selectores de "variable", "color" y
+"basemap" únicamente cambian cómo se visualizan columnas existentes;
+el toggle de "capa" solo alterna el estilo del choropleth (on/off), no
+los datos. Todo dato mostrado en KPIs, insights y rankings ya existía en
+`gdf` / `report` — aquí solo se ordena, formatea y agrupa visualmente.
 """
+import io
 import json
 import sys
 import time
@@ -36,7 +47,7 @@ st.set_page_config(
 )
 
 # ══════════════════════════════════════════════════════════
-# CSS — mismo lenguaje visual que Home.py
+# CSS — lenguaje visual GIS profesional
 # ══════════════════════════════════════════════════════════
 st.markdown("""
 <style>
@@ -44,15 +55,17 @@ st.markdown("""
 
 :root {
     --bg:        #0B0F17;
-    --panel:     #131A26;
-    --panel-hi:  #1A2333;
-    --border:    #232C3D;
+    --panel:     #10151F;
+    --panel-hi:  #171F2C;
+    --border:    #212B3B;
+    --border-lo: #1A2230;
     --text:      #F4F5F7;
     --muted:     #8A93A6;
-    --muted-dim: #5C6478;
+    --muted-dim: #576073;
     --accent:    #5B8DEF;
-    --accent-soft: rgba(91,141,239,0.12);
+    --accent-soft: rgba(91,141,239,0.10);
     --ok:        #34D399;
+    --warn:      #F5B942;
 }
 
 html, body, .stApp { background: var(--bg) !important; }
@@ -66,72 +79,94 @@ footer {visibility: hidden;}
 #MainMenu {visibility: hidden;}
 
 .block-container {
-    max-width: 1180px;
-    padding-top: 2rem;
+    max-width: 1400px;
+    padding-top: 1.6rem;
     padding-bottom: 3rem;
 }
 
+/* ── Encabezado ───────────────────────────────────────────── */
 .kicker {
     font-family: 'Space Mono', monospace;
-    font-size: 12px;
+    font-size: 11px;
     letter-spacing: 3px;
     text-transform: uppercase;
     color: var(--accent);
-    margin-bottom: 10px;
 }
 .page-title {
-    font-size: 2.2rem;
+    font-size: 1.9rem;
     font-weight: 800;
-    letter-spacing: -1px;
+    letter-spacing: -0.8px;
     color: var(--text);
-    margin: 0 0 6px 0;
+    margin: 2px 0 0 0;
 }
-.page-sub {
-    color: var(--muted);
-    font-size: 14.5px;
-    margin-bottom: 8px;
-}
-
-.panel-title {
-    color: var(--text);
-    font-weight: 700;
-    font-size: 18px;
-    margin: 0 0 18px 0;
-    letter-spacing: -0.3px;
-}
-.section-label {
+.pipeline-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
     font-family: 'Space Mono', monospace;
     font-size: 10.5px;
-    letter-spacing: 2.5px;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    color: var(--muted);
+    background: var(--panel-hi);
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    padding: 6px 14px 6px 10px;
+    float: right;
+    margin-top: 4px;
+}
+.dot {
+    width: 7px; height: 7px; border-radius: 50%;
+    background: var(--ok);
+    box-shadow: 0 0 6px var(--ok);
+    flex-shrink: 0;
+}
+.dot.busy { background: var(--warn); box-shadow: 0 0 6px var(--warn); }
+
+hr.thin { border: none; border-top: 1px solid var(--border-lo); margin: 16px 0 20px 0; }
+
+/* ── Toolbar de escenario (GIS command bar) ──────────────────── */
+.toolbar-wrap {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 14px 18px 4px 18px;
+    margin-bottom: 18px;
+}
+.toolbar-label {
+    font-family: 'Space Mono', monospace;
+    font-size: 9.5px;
+    letter-spacing: 2px;
     text-transform: uppercase;
     color: var(--muted-dim);
-    margin: 28px 0 14px 0;
+    margin-bottom: -2px;
 }
-
-/* ── Widgets ──────────────────────────────────────────────── */
 [data-testid="stSelectbox"] > div > div,
 [data-testid="stNumberInput"] > div > div {
     background: var(--panel-hi) !important;
     border: 1px solid var(--border) !important;
-    border-radius: 10px !important;
+    border-radius: 8px !important;
     color: var(--text) !important;
+    min-height: 38px !important;
 }
 [data-testid="stSelectbox"] label,
 [data-testid="stNumberInput"] label,
 [data-testid="stSlider"] label {
     color: var(--muted) !important;
-    font-size: 13px !important;
+    font-size: 11px !important;
     font-weight: 500 !important;
+    letter-spacing: 0.3px;
 }
 [data-testid="stSlider"] div[data-baseweb="slider"] > div > div {
     background: var(--accent) !important;
 }
 
-div[data-testid="stButton"] > button {
-    border-radius: 10px;
+div[data-testid="stButton"] > button,
+div[data-testid="stDownloadButton"] > button {
+    border-radius: 8px;
     font-weight: 600;
-    font-size: 15px;
-    padding: 12px 22px;
+    font-size: 13.5px;
+    padding: 9px 18px;
     border: 1px solid var(--accent);
     transition: all 0.15s ease;
 }
@@ -143,116 +178,289 @@ div[data-testid="stButton"] > button[kind="primary"]:hover {
     background: #4A78D6;
     border-color: #4A78D6;
 }
+div[data-testid="stDownloadButton"] > button,
+div[data-testid="stButton"] > button[kind="secondary"] {
+    background: var(--panel-hi);
+    color: var(--muted);
+    border: 1px solid var(--border);
+    font-size: 12.5px;
+    padding: 8px 14px;
+}
+div[data-testid="stDownloadButton"] > button:hover,
+div[data-testid="stButton"] > button[kind="secondary"]:hover {
+    border-color: var(--accent);
+    color: var(--accent);
+}
 
-/* ── Tarjetas ─────────────────────────────────────────────── */
-.card {
+/* ── Badges / chips de escenario ─────────────────────────────── */
+.chip-row { display: flex; flex-wrap: wrap; gap: 8px; margin: 10px 0 4px 0; }
+.chip {
+    display: inline-flex; align-items: center; gap: 6px;
+    background: var(--panel-hi);
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    padding: 5px 13px;
+    font-size: 12px;
+    color: var(--text);
+}
+.chip b { color: var(--muted); font-weight: 500; margin-right: 2px; }
+.chip.accent { border-color: var(--accent); color: var(--accent); }
+
+/* ── Executive summary ───────────────────────────────────────── */
+.exec-summary {
+    color: var(--muted);
+    font-size: 15px;
+    line-height: 1.65;
+    max-width: 980px;
+    margin: 6px 0 22px 0;
+}
+.exec-summary strong { color: var(--text); font-weight: 600; }
+
+/* ── GIS viewport ─────────────────────────────────────────────── */
+.section-label {
+    font-family: 'Space Mono', monospace;
+    font-size: 10px;
+    letter-spacing: 2.5px;
+    text-transform: uppercase;
+    color: var(--muted-dim);
+    margin: 34px 0 12px 0;
+}
+.map-toolbar {
+    display: flex; align-items: center; gap: 18px;
     background: var(--panel);
     border: 1px solid var(--border);
-    border-radius: 14px;
-    padding: 26px 24px;
-}
-.preview-card {
-    background: var(--panel);
-    border: 1px solid var(--border);
-    border-radius: 14px;
-    padding: 26px 24px;
-    min-height: 460px;
-    display: flex;
-    flex-direction: column;
-}
-.preview-empty {
-    flex: 1;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    text-align: center;
-    color: var(--muted-dim);
-    font-size: 14px;
-}
-.map-placeholder {
-    margin-top: 18px;
-    border: 1px dashed var(--border);
-    border-radius: 12px;
-    padding: 60px 20px;
-    text-align: center;
-    color: var(--muted-dim);
-    font-size: 13px;
-    background: rgba(255,255,255,0.015);
+    border-bottom: none;
+    border-radius: 14px 14px 0 0;
+    padding: 10px 16px;
 }
 .map-card {
-    margin-top: 16px;
     border: 1px solid var(--border);
-    border-radius: 12px;
-    padding: 10px 10px 2px 10px;
-    background: rgba(255,255,255,0.015);
+    border-top: none;
+    border-radius: 0 0 14px 14px;
+    padding: 0;
+    background: #0D1219;
+    position: relative;
+    overflow: hidden;
 }
-
-.summary-row {
-    display: flex;
-    justify-content: space-between;
-    padding: 10px 0;
-    border-bottom: 1px solid var(--border);
+.map-placeholder {
+    border: 1px dashed var(--border);
+    border-radius: 14px;
+    padding: 120px 20px;
+    text-align: center;
+    color: var(--muted-dim);
     font-size: 13.5px;
+    background: rgba(255,255,255,0.012);
 }
-.summary-row:last-child { border-bottom: none; }
-.summary-label { color: var(--muted); }
-.summary-value { color: var(--text); font-weight: 600; }
-
-[data-testid="stMetric"] {
-    background: var(--panel-hi) !important;
-    border: 1px solid var(--border) !important;
-    border-radius: 12px !important;
-    padding: 16px 18px !important;
+.map-toolbar [data-testid="stSelectbox"] > div > div {
+    min-height: 32px !important;
+    font-size: 12px !important;
 }
-[data-testid="stMetricLabel"] {
-    color: var(--muted) !important;
-    font-size: 11px !important;
-    letter-spacing: 1.5px !important;
-    text-transform: uppercase !important;
-}
-[data-testid="stMetricValue"] {
-    color: var(--text) !important;
-    font-family: 'Space Mono', monospace !important;
+.map-toolbar [data-testid="stSelectbox"] label { display: none !important; }
+.layer-toggle-label {
+    font-size: 11.5px; color: var(--muted); white-space: nowrap;
 }
 
-hr.thin { border: none; border-top: 1px solid var(--border); margin: 28px 0; }
+.floating-legend-wrap { display: flex; justify-content: flex-end; pointer-events: none; }
+.floating-legend {
+    pointer-events: auto;
+    width: 208px;
+    background: rgba(16,21,31,0.86);
+    backdrop-filter: blur(6px);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 12px 14px;
+    margin: 16px 16px 0 0;
+    font-size: 11.5px;
+    color: var(--muted);
+}
+.floating-legend .lg-title {
+    font-family: 'Space Mono', monospace;
+    font-size: 9.5px;
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+    color: var(--muted-dim);
+    margin-bottom: 8px;
+}
+.legend-gradient {
+    height: 8px; border-radius: 4px; margin-bottom: 4px;
+}
+.legend-scale-row { display: flex; justify-content: space-between; font-size: 10px; color: var(--muted-dim); }
+.fullscreen-chip {
+    pointer-events: auto;
+    width: fit-content;
+    background: rgba(16,21,31,0.86);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 5px 10px;
+    font-size: 11px;
+    color: var(--muted);
+    margin: 16px 0 0 16px;
+}
+
+/* ── KPI strip discreto ──────────────────────────────────────── */
+.kpi-strip {
+    display: flex;
+    align-items: stretch;
+    gap: 0;
+    margin-top: 18px;
+}
+.kpi-item {
+    flex: 1;
+    padding: 4px 20px;
+    border-left: 1px solid var(--border-lo);
+}
+.kpi-item:first-child { border-left: none; padding-left: 2px; }
+.kpi-item .kpi-label {
+    font-family: 'Space Mono', monospace;
+    font-size: 9.5px;
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+    color: var(--muted-dim);
+    margin-bottom: 4px;
+}
+.kpi-item .kpi-value {
+    font-family: 'Space Mono', monospace;
+    font-size: 1.15rem;
+    font-weight: 700;
+    color: var(--text);
+}
+.kpi-item .kpi-value.accent { color: var(--accent); }
+
+/* ── Spatial insights ─────────────────────────────────────────── */
+.insight-line {
+    display: flex; align-items: baseline; gap: 10px;
+    font-size: 13.5px; color: var(--muted);
+    padding: 7px 0;
+    border-bottom: 1px solid var(--border-lo);
+}
+.insight-line:last-child { border-bottom: none; }
+.insight-line .dot-sm {
+    width: 5px; height: 5px; border-radius: 50%;
+    background: var(--accent); flex-shrink: 0;
+}
+.insight-line strong { color: var(--text); font-weight: 600; }
+
+/* ── Rankings visuales ────────────────────────────────────────── */
+.rank-item {
+    display: grid;
+    grid-template-columns: 30px 1fr 90px;
+    align-items: center;
+    gap: 12px;
+    padding: 9px 0;
+}
+.rank-num {
+    font-family: 'Space Mono', monospace;
+    font-size: 12px;
+    color: var(--muted-dim);
+}
+.rank-body .rank-name {
+    font-size: 13px; color: var(--text); font-weight: 500;
+    margin-bottom: 5px;
+    display: flex; justify-content: space-between; gap: 10px;
+}
+.rank-body .rank-muni { color: var(--muted-dim); font-weight: 400; font-size: 11.5px; }
+.rank-bar-track { height: 6px; background: var(--border-lo); border-radius: 3px; overflow: hidden; }
+.rank-bar-fill { height: 100%; border-radius: 3px; background: linear-gradient(90deg, var(--accent), #8FB4FF); }
+.rank-value {
+    font-family: 'Space Mono', monospace;
+    font-size: 12px; color: var(--text); text-align: right;
+}
+
+/* ── Exportaciones ────────────────────────────────────────────── */
+.export-row { display: flex; gap: 10px; margin-top: 6px; }
 </style>
 """, unsafe_allow_html=True)
 
+
 # ══════════════════════════════════════════════════════════
-# HEADER
+# HELPERS DE PRESENTACIÓN (sin lógica económica — solo formato)
 # ══════════════════════════════════════════════════════════
-st.markdown('<div class="kicker">◆ NEW SIMULATION</div>', unsafe_allow_html=True)
-st.markdown('<div class="page-title">Run Simulation</div>', unsafe_allow_html=True)
-st.markdown(
-    '<div class="page-sub">Define un escenario económico y ejecuta el motor '
-    'de simulación espacial.</div>',
-    unsafe_allow_html=True,
-)
-st.markdown('<hr class="thin">', unsafe_allow_html=True)
+def format_money(value: float) -> str:
+    """Formatea un monto a $X.XX K/M/B MXN. Presentación pura, no transforma
+    el valor subyacente producido por el motor."""
+    sign = "-" if value < 0 else ""
+    v = abs(value)
+    if v >= 1_000_000_000:
+        return f"{sign}${v / 1_000_000_000:,.2f} B MXN"
+    if v >= 1_000_000:
+        return f"{sign}${v / 1_000_000:,.2f} M MXN"
+    if v >= 1_000:
+        return f"{sign}${v / 1_000:,.2f} K MXN"
+    return f"{sign}${v:,.2f} MXN"
+
+
+def format_compact(value: float) -> str:
+    """Formato compacto para KPIs/rankings (sin símbolo de moneda)."""
+    sign = "-" if value < 0 else ""
+    v = abs(value)
+    if v >= 1_000_000_000:
+        return f"{sign}{v / 1_000_000_000:,.2f}B"
+    if v >= 1_000_000:
+        return f"{sign}{v / 1_000_000:,.2f}M"
+    if v >= 1_000:
+        return f"{sign}{v / 1_000:,.2f}K"
+    return f"{sign}{v:,.2f}"
+
+
+def _municipio_code(cvegeo: str) -> str:
+    """Extrae el código de municipio (posiciones 3-5) directamente del
+    identificador cvegeo estándar INEGI. Solo parseo de string, sin
+    lógica espacial ni económica."""
+    cvegeo = str(cvegeo)
+    return cvegeo[2:5] if len(cvegeo) >= 5 else "—"
+
+
+# Columnas de impacto ya producidas por el motor — solo se eligen para
+# visualización, no se derivan valores nuevos.
+_VARIABLE_OPTIONS = {
+    "Propagated Impact": IMPACTO_PROPAGADO_COL,
+    "Direct Impact": IMPACTO_DIRECTO_COL,
+    "Indirect Impact": IMPACTO_INDIRECTO_COL,
+}
+_COLOR_OPTIONS = ["Blues", "Viridis", "Sunset", "Turbo", "Tealgrn"]
+_BASEMAP_OPTIONS = {
+    "Dark": "carto-darkmatter",
+    "Light": "carto-positron",
+    "Streets": "open-street-map",
+}
+
 
 # ══════════════════════════════════════════════════════════
 # CARGA DEL MODELO (API pública existente — sin recálculo)
 # ══════════════════════════════════════════════════════════
-@st.cache_resource(show_spinner="Cargando modelo económico…")
+@st.cache_resource(show_spinner="Loading economic model…")
 def cargar_modelo() -> ModeloEconomico:
     return ModeloEconomico(str(_REPO_ROOT / "serio" / "data"))
 
 modelo = cargar_modelo()
 
-# ══════════════════════════════════════════════════════════
-# LAYOUT — DOS COLUMNAS
-# ══════════════════════════════════════════════════════════
-col_left, col_right = st.columns([1, 1.15], gap="large")
+_has_result = "simulation_report" in st.session_state and "simulation_gdf" in st.session_state
 
-# ── COLUMNA IZQUIERDA — CONTROL PANEL ───────────────────────
-with col_left:
-    st.markdown('<div class="panel-title">New Simulation</div>', unsafe_allow_html=True)
+# ══════════════════════════════════════════════════════════
+# HEADER
+# ══════════════════════════════════════════════════════════
+status_label = "Ready" if not _has_result else "Result loaded"
+st.markdown(
+    f'<div class="pipeline-chip"><span class="dot"></span>'
+    f'SERIO · Spatial Propagation · {status_label}</div>',
+    unsafe_allow_html=True,
+)
+st.markdown('<div class="kicker">◆ SPATIAL SIMULATION</div>', unsafe_allow_html=True)
+st.markdown('<div class="page-title">Run Simulation</div>', unsafe_allow_html=True)
+st.markdown('<hr class="thin">', unsafe_allow_html=True)
 
+# ══════════════════════════════════════════════════════════
+# TOOLBAR — definición de escenario (GIS command bar)
+# ══════════════════════════════════════════════════════════
+st.markdown('<div class="toolbar-wrap">', unsafe_allow_html=True)
+t1, t2, t3, t4, t5 = st.columns([1.3, 1.7, 1.1, 1.1, 0.9])
+
+with t1:
     nombres_estados = sorted(modelo.mapa_estados.keys())
     estado_nombre = st.selectbox("Region", nombres_estados, index=0)
     estado_key = modelo.mapa_estados[estado_nombre]
 
+with t2:
     df_sec = modelo.df_sectores
     opciones_sector = [f"{r.scian} — {r.nombre}" for _, r in df_sec.iterrows()]
     sel_sector = st.selectbox("Economic Sector", opciones_sector, index=0)
@@ -261,8 +469,9 @@ with col_left:
     sector_idx = int(sector_row["indice"])
     sector_name = sector_row["nombre"]
 
+with t3:
     monto_pesos = st.number_input(
-        "Shock Amount (MXN)",
+        "Shock (MXN)",
         value=100_000_000.0,
         min_value=-1e12,
         max_value=1e12,
@@ -270,37 +479,73 @@ with col_left:
         format="%.0f",
     )
 
-    rho = st.slider("ρ — Spatial Decay Parameter", 0.0, 0.95, 0.35, 0.01)
+with t4:
+    rho = st.slider("ρ — Spatial Decay", 0.0, 0.95, 0.35, 0.01)
 
-    st.markdown('<div style="height:10px;"></div>', unsafe_allow_html=True)
-    launch = st.button("Launch Simulation", type="primary", use_container_width=True)
+with t5:
+    st.markdown('<div style="height:26px;"></div>', unsafe_allow_html=True)
+    launch = st.button("▶ Launch", type="primary", use_container_width=True)
 
-    st.markdown('<div class="section-label">Scenario Summary</div>', unsafe_allow_html=True)
-    st.markdown(f"""
-    <div class="card">
-        <div class="summary-row"><span class="summary-label">Region</span><span class="summary-value">{estado_nombre}</span></div>
-        <div class="summary-row"><span class="summary-label">Sector</span><span class="summary-value">{sector_name}</span></div>
-        <div class="summary-row"><span class="summary-label">Shock Amount</span><span class="summary-value">${monto_pesos:,.0f} MXN</span></div>
-        <div class="summary-row"><span class="summary-label">ρ</span><span class="summary-value">{rho:.2f}</span></div>
-    </div>
-    """, unsafe_allow_html=True)
+st.markdown(f"""
+<div class="chip-row">
+    <span class="chip accent">📍 <b>Region</b>{estado_nombre}</span>
+    <span class="chip accent">🏭 <b>Sector</b>{sector_name}</span>
+    <span class="chip accent">💰 <b>Shock</b>{format_money(monto_pesos)}</span>
+    <span class="chip accent">🌊 <b>ρ</b>{rho:.2f}</span>
+</div>
+""", unsafe_allow_html=True)
+st.markdown('</div>', unsafe_allow_html=True)
 
-# ── COLUMNA DERECHA — SIMULATION PREVIEW ────────────────────
-with col_right:
-    preview_slot = st.container()
 
-def _render_map(gdf):
-    """Mapa interactivo del GeoDataFrame producido por run_simulation_engine().
-    Solo lectura/visualización — no transforma ni recalcula columnas."""
+# ══════════════════════════════════════════════════════════
+# MAPA — protagonista (render function)
+# ══════════════════════════════════════════════════════════
+def _prepare_map_data(gdf, value_col: str, sector_label: str):
+    """Prepara columnas de presentación (share, municipio) sobre el
+    GeoDataFrame ya producido por el motor. No recalcula economía."""
     gdf_map = gdf[gdf.geometry.notna()].copy()
     n_sin_geom = len(gdf) - len(gdf_map)
 
-    if gdf_map.empty:
+    total = gdf_map[value_col].sum()
+    gdf_map["participacion_pct"] = (
+        gdf_map[value_col] / total * 100 if total != 0 else 0.0
+    )
+    gdf_map["municipio"] = gdf_map[AGEB_ID_COL].map(_municipio_code)
+    gdf_map["sector_shock"] = sector_label
+    return gdf_map, n_sin_geom
+
+
+def render_map_block(gdf, sector_label: str):
+    """Bloque de mapa GIS: mini-toolbar (capa/variable/color/basemap),
+    mapa grande, leyenda flotante y chip de fullscreen. Solo lectura sobre
+    columnas del motor."""
+
+    gdf_geo = gdf[gdf.geometry.notna()]
+    if gdf_geo.empty:
         st.markdown(
             '<div class="map-placeholder">No spatial geometry available for this result.</div>',
             unsafe_allow_html=True,
         )
-        return
+        return None, IMPACTO_PROPAGADO_COL
+
+    st.markdown('<div class="map-toolbar">', unsafe_allow_html=True)
+    m1, m2, m3, m4, m5 = st.columns([1.3, 1, 1, 1.4, 1])
+    with m1:
+        st.markdown('<div class="layer-toggle-label">🗂 Layers</div>', unsafe_allow_html=True)
+        layer_on = st.checkbox("AGEB Impact Layer", value=True, key="layer_toggle")
+    with m2:
+        var_label = st.selectbox("Variable", list(_VARIABLE_OPTIONS.keys()), index=0, key="var_sel")
+        value_col = _VARIABLE_OPTIONS[var_label]
+    with m3:
+        color_label = st.selectbox("Color", _COLOR_OPTIONS, index=0, key="color_sel")
+    with m4:
+        basemap_label = st.selectbox("Basemap", list(_BASEMAP_OPTIONS.keys()), index=0, key="basemap_sel")
+        basemap_style = _BASEMAP_OPTIONS[basemap_label]
+    with m5:
+        st.markdown('<div class="layer-toggle-label">Zoom / pan enabled</div>', unsafe_allow_html=True)
+    st.markdown('</div>', unsafe_allow_html=True)
+
+    gdf_map, n_sin_geom = _prepare_map_data(gdf, value_col, sector_label)
 
     try:
         gdf_wgs84 = gdf_map.to_crs(epsg=4326)
@@ -310,74 +555,255 @@ def _render_map(gdf):
     geojson = json.loads(gdf_wgs84.to_json())
     centroid = gdf_wgs84.geometry.unary_union.centroid
 
+    color_kwargs = dict(color=value_col, color_continuous_scale=color_label) if layer_on else dict()
+
     fig = px.choropleth_mapbox(
         gdf_wgs84,
         geojson=geojson,
         locations=gdf_wgs84.index,
-        color=IMPACTO_PROPAGADO_COL,
-        color_continuous_scale="Blues",
-        mapbox_style="carto-darkmatter",
+        mapbox_style=basemap_style,
         zoom=8,
         center={"lat": centroid.y, "lon": centroid.x},
-        opacity=0.75,
-        hover_name=AGEB_ID_COL,
-        hover_data={
-            IMPACTO_PROPAGADO_COL: ":.2f",
-            IMPACTO_DIRECTO_COL: ":.2f",
-            IMPACTO_INDIRECTO_COL: ":.2f",
-        },
-        labels={
-            IMPACTO_PROPAGADO_COL: "Propagated impact",
-            IMPACTO_DIRECTO_COL: "Direct impact",
-            IMPACTO_INDIRECTO_COL: "Indirect impact",
-        },
+        opacity=0.80 if layer_on else 0.35,
+        **color_kwargs,
     )
-    fig.update_layout(
-        margin=dict(l=0, r=0, t=0, b=0),
-        height=340,
-        paper_bgcolor="#131A26",
-        font=dict(family="Inter", color="#F4F5F7", size=11),
-        coloraxis_colorbar=dict(
-            title="Propagated<br>impact",
-            tickfont=dict(color="#8A93A6"),
-            title_font=dict(color="#8A93A6"),
+
+    # Hover limpio y consistente, sin importar la variable elegida
+    fig.update_traces(
+        customdata=gdf_wgs84[[AGEB_ID_COL, "municipio", value_col, "participacion_pct"]].values,
+        hovertemplate=(
+            "<b>AGEB %{customdata[0]}</b><br>"
+            "Municipio %{customdata[1]}<br>"
+            f"{var_label}: " + "%{customdata[2]:,.2f}<br>"
+            "Share: %{customdata[3]:.2f}%<extra></extra>"
         ),
     )
+
+    fig.update_layout(
+        margin=dict(l=0, r=0, t=0, b=0),
+        height=680,
+        paper_bgcolor="#0D1219",
+        plot_bgcolor="#0D1219",
+        font=dict(family="Inter", color="#F4F5F7", size=11),
+        showlegend=False,
+        hoverlabel=dict(
+            bgcolor="#171F2C",
+            bordercolor="#212B3B",
+            font=dict(family="Inter", color="#F4F5F7", size=12),
+        ),
+        coloraxis_showscale=False,
+    )
+
     st.markdown('<div class="map-card">', unsafe_allow_html=True)
-    st.plotly_chart(fig, use_container_width=True, config={"scrollZoom": True})
+    st.plotly_chart(fig, use_container_width=True, config={"scrollZoom": True, "displaylogo": False})
+
+    # ── Leyenda flotante + chip de fullscreen (overlay sobre el mapa) ──
+    grad_css = {
+        "Blues":   "linear-gradient(90deg,#0d2b52,#3b82f6,#bfdbfe)",
+        "Viridis": "linear-gradient(90deg,#440154,#21908c,#fde725)",
+        "Sunset":  "linear-gradient(90deg,#2c115f,#c1447e,#fddb92)",
+        "Turbo":   "linear-gradient(90deg,#30123b,#29bf12,#f9c80e)",
+        "Tealgrn": "linear-gradient(90deg,#0b3d3a,#1fa187,#c2f5e9)",
+    }.get(color_label, "linear-gradient(90deg,#0d2b52,#3b82f6,#bfdbfe)")
+
+    vmin = float(gdf_wgs84[value_col].min())
+    vmax = float(gdf_wgs84[value_col].max())
+
+    st.markdown(f"""
+    <div class="floating-legend-wrap" style="margin-top:-660px;">
+      <div class="floating-legend">
+        <div class="lg-title">Legend · {var_label}</div>
+        <div class="legend-gradient" style="background:{grad_css};"></div>
+        <div class="legend-scale-row"><span>{format_compact(vmin)}</span><span>{format_compact(vmax)}</span></div>
+      </div>
+    </div>
+    <div class="fullscreen-chip" style="margin-top:-40px;">⛶ Fullscreen · scroll to zoom</div>
+    """, unsafe_allow_html=True)
+
     st.markdown('</div>', unsafe_allow_html=True)
 
     if n_sin_geom > 0:
-        st.caption(f"⚠ {n_sin_geom} AGEB(s) sin geometría, excluida(s) del mapa.")
+        st.caption(f"⚠ {n_sin_geom} AGEB(s) without geometry, excluded from the map.")
 
-def render_preview_empty():
-    with preview_slot:
-        st.markdown("""
-        <div class="preview-card">
-            <div class="panel-title">Simulation Preview</div>
-            <div class="preview-empty">No simulation has been executed yet.</div>
-            <div class="map-placeholder">Spatial visualization will appear here.</div>
+    return gdf_map, value_col
+
+
+# ══════════════════════════════════════════════════════════
+# RENDER — resultado completo (jerarquía: summary → map → kpi → insights → rank → export)
+# ══════════════════════════════════════════════════════════
+def render_result(report, gdf, scenario: dict):
+    sector_label = scenario.get("sector", "—")
+    estado_label = scenario.get("estado", "—")
+    rho_label = scenario.get("rho", 0.0)
+    monto_label = scenario.get("monto_pesos", 0.0)
+
+    mult_txt = (
+        f"{report.multiplicador_global:.2f}×"
+        if report.multiplicador_global is not None else "—"
+    )
+
+    # ── 1. Executive Summary (≤4 líneas) ─────────────────────────────
+    st.markdown(f"""
+    <div class="exec-summary">
+    A <strong>{format_money(monto_label)}</strong> shock in <strong>{sector_label}</strong>
+    ({estado_label}) propagates to <strong>{format_money(report.shock_total_propagado)}</strong>
+    in spatial economic impact — a <strong>{mult_txt}</strong> multiplier — across the AGEB
+    network at ρ = {rho_label:.2f}, computed in {report.tiempo_ejecucion_seg:.2f}s.
+    </div>
+    """, unsafe_allow_html=True)
+
+    # ── 2. Spatial Map ────────────────────────────────────────────────
+    st.markdown('<div class="section-label">Spatial Map</div>', unsafe_allow_html=True)
+    gdf_map, value_col = render_map_block(gdf, sector_label)
+    var_label = [k for k, v in _VARIABLE_OPTIONS.items() if v == value_col][0]
+
+    # ── 3. KPIs (discretos) ───────────────────────────────────────────
+    n_agebs = len(gdf)
+    n_afectadas = int((gdf[IMPACTO_PROPAGADO_COL].abs() > 0).sum())
+    impacto_promedio = float(gdf[IMPACTO_PROPAGADO_COL].mean()) if n_agebs else 0.0
+    impacto_maximo = float(gdf[IMPACTO_PROPAGADO_COL].max()) if n_agebs else 0.0
+
+    st.markdown(f"""
+    <div class="kpi-strip">
+        <div class="kpi-item">
+            <div class="kpi-label">Direct Impact</div>
+            <div class="kpi-value">{format_money(report.shock_total_inicial)}</div>
+        </div>
+        <div class="kpi-item">
+            <div class="kpi-label">Spatial Impact</div>
+            <div class="kpi-value accent">{format_money(report.shock_total_propagado)}</div>
+        </div>
+        <div class="kpi-item">
+            <div class="kpi-label">Multiplier</div>
+            <div class="kpi-value">{mult_txt}</div>
+        </div>
+        <div class="kpi-item">
+            <div class="kpi-label">AGEBs Affected</div>
+            <div class="kpi-value">{n_afectadas:,} / {n_agebs:,}</div>
+        </div>
+        <div class="kpi-item">
+            <div class="kpi-label">Runtime</div>
+            <div class="kpi-value">{report.tiempo_ejecucion_seg:.2f}s</div>
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
+
+    # ── 4. Spatial Insights ───────────────────────────────────────────
+    st.markdown('<div class="section-label">Spatial Insights</div>', unsafe_allow_html=True)
+
+    if gdf_map is not None and not gdf_map.empty:
+        top10_share = float(
+            gdf_map.sort_values(value_col, ascending=False).head(10)["participacion_pct"].sum()
+        )
+        top_row = gdf_map.sort_values(value_col, ascending=False).iloc[0]
+        n_municipios = gdf_map["municipio"].nunique()
+
+        st.markdown(f"""
+        <div>
+            <div class="insight-line"><span class="dot-sm"></span>
+                Top 10 AGEBs concentrate <strong>{top10_share:.1f}%</strong> of total {var_label.lower()}.
+            </div>
+            <div class="insight-line"><span class="dot-sm"></span>
+                Highest impact: AGEB <strong>{top_row[AGEB_ID_COL]}</strong>
+                (municipio {top_row['municipio']}) with {format_money(top_row[value_col])}.
+            </div>
+            <div class="insight-line"><span class="dot-sm"></span>
+                Effect spans <strong>{n_municipios}</strong> municipios across
+                <strong>{n_afectadas:,}</strong> affected AGEBs.
+            </div>
+            <div class="insight-line"><span class="dot-sm"></span>
+                Average impact per AGEB: <strong>{format_money(impacto_promedio)}</strong> ·
+                Maximum: <strong>{format_money(impacto_maximo)}</strong>.
+            </div>
         </div>
         """, unsafe_allow_html=True)
+    else:
+        st.caption("No geometry available to compute spatial insights.")
 
-def render_preview_result(report, gdf):
-    with preview_slot:
-        st.markdown('<div class="panel-title">Simulation Preview</div>', unsafe_allow_html=True)
-        st.success("Simulation completed successfully.")
+    # ── 5. Rankings (visual, no dataframe) ────────────────────────────
+    st.markdown('<div class="section-label">Top 10 AGEBs</div>', unsafe_allow_html=True)
 
-        m1, m2 = st.columns(2)
-        m1.metric("Shock Inicial", f"{report.shock_total_inicial:,.2f}")
-        m2.metric("Shock Propagado", f"{report.shock_total_propagado:,.2f}")
-
-        m3, m4 = st.columns(2)
-        mult_txt = (
-            f"{report.multiplicador_global:.4f}"
-            if report.multiplicador_global is not None else "—"
+    if gdf_map is not None and not gdf_map.empty:
+        df_rank = (
+            gdf_map[[AGEB_ID_COL, "municipio", value_col]]
+            .sort_values(value_col, ascending=False)
+            .head(10)
+            .reset_index(drop=True)
         )
-        m3.metric("Multiplicador Espacial", mult_txt)
-        m4.metric("Tiempo de Ejecución", f"{report.tiempo_ejecucion_seg:.3f} s")
+        max_val = float(df_rank[value_col].abs().max()) or 1.0
 
-        _render_map(gdf)
+        rows_html = ""
+        for i, row in df_rank.iterrows():
+            pct = min(100.0, abs(float(row[value_col])) / max_val * 100)
+            rows_html += f"""
+            <div class="rank-item">
+                <div class="rank-num">#{i+1:02d}</div>
+                <div class="rank-body">
+                    <div class="rank-name">
+                        <span>AGEB {row[AGEB_ID_COL]} <span class="rank-muni">· municipio {row['municipio']}</span></span>
+                    </div>
+                    <div class="rank-bar-track"><div class="rank-bar-fill" style="width:{pct:.1f}%;"></div></div>
+                </div>
+                <div class="rank-value">{format_compact(row[value_col])}</div>
+            </div>
+            """
+        st.markdown(f'<div>{rows_html}</div>', unsafe_allow_html=True)
+    else:
+        st.caption("No geometry available to build the ranking.")
+
+    # ── 6. Export ──────────────────────────────────────────────────────
+    st.markdown('<div class="section-label">Export</div>', unsafe_allow_html=True)
+    e1, e2, e3 = st.columns(3)
+
+    with e1:
+        try:
+            geojson_bytes = gdf.to_json().encode("utf-8")
+            st.download_button(
+                "⬇ GeoJSON", data=geojson_bytes,
+                file_name="lattise_simulation_result.geojson",
+                mime="application/geo+json", use_container_width=True,
+            )
+        except Exception as e:
+            st.button("⬇ GeoJSON", disabled=True, use_container_width=True)
+            st.caption(f"Unavailable: {e}")
+
+    with e2:
+        try:
+            buf = io.BytesIO()
+            gdf.to_parquet(buf)
+            st.download_button(
+                "⬇ Parquet", data=buf.getvalue(),
+                file_name="lattise_simulation_result.parquet",
+                mime="application/octet-stream", use_container_width=True,
+            )
+        except Exception as e:
+            st.button("⬇ Parquet", disabled=True, use_container_width=True)
+            st.caption(f"Unavailable: {e}")
+
+    with e3:
+        report_json = json.dumps(report.to_dict(), indent=2, ensure_ascii=False).encode("utf-8")
+        st.download_button(
+            "⬇ JSON Report", data=report_json,
+            file_name="lattise_simulation_report.json",
+            mime="application/json", use_container_width=True,
+        )
+
+
+def render_empty_state():
+    st.markdown("""
+    <div class="exec-summary">
+    Define a scenario in the toolbar above and press <strong>Launch</strong> to run the
+    spatial propagation engine. Results — map, KPIs, insights, rankings and exports —
+    will appear here once the simulation completes.
+    </div>
+    """, unsafe_allow_html=True)
+    st.markdown('<div class="section-label">Spatial Map</div>', unsafe_allow_html=True)
+    st.markdown(
+        '<div class="map-placeholder">Spatial visualization will appear here once a '
+        'simulation has been executed.</div>',
+        unsafe_allow_html=True,
+    )
+
 
 # ══════════════════════════════════════════════════════════
 # EJECUCIÓN — API pública existente, sin recálculo de etapas
@@ -401,12 +827,14 @@ if launch:
             st.session_state["simulation_timestamp"] = time.time()
 
         except Exception as e:
-            with preview_slot:
-                st.markdown('<div class="panel-title">Simulation Preview</div>', unsafe_allow_html=True)
-                st.error(f"Simulation failed: {e}")
+            st.error(f"Simulation failed: {e}")
         else:
-            render_preview_result(report, gdf_final)
-elif "simulation_report" in st.session_state and "simulation_gdf" in st.session_state:
-    render_preview_result(st.session_state["simulation_report"], st.session_state["simulation_gdf"])
+            render_result(report, gdf_final, st.session_state["simulation_scenario"])
+elif _has_result:
+    render_result(
+        st.session_state["simulation_report"],
+        st.session_state["simulation_gdf"],
+        st.session_state.get("simulation_scenario", {}),
+    )
 else:
-    render_preview_empty()
+    render_empty_state()
