@@ -25,9 +25,10 @@ WAREHOUSE_DIR  = DATA_DIR / "warehouse"    # Stage 5 — warehouse.parquet + met
 QA_DIR         = DATA_DIR / "qa"           # Stage 6 — quality_report.json/pdf
 SSD_DIR        = DATA_DIR / "ssd"          # Stage 7 — shock_ageb.parquet
 GRAPH_DIR      = DATA_DIR / "graph"        # Spatial Graph Builder — matriz M (independiente del SEW)
+VISUALIZATION_DIR = DATA_DIR / "visualization"  # Stage 9 — output de visualization/maps.py (PNG/GeoJSON)
 
 for _d in (RAW_DIR, VALIDATED_DIR, NORMALIZED_DIR, INTEGRATED_DIR,
-           WAREHOUSE_DIR, QA_DIR, SSD_DIR, GRAPH_DIR):
+           WAREHOUSE_DIR, QA_DIR, SSD_DIR, GRAPH_DIR, VISUALIZATION_DIR):
     _d.mkdir(parents=True, exist_ok=True)
 
 # ── Nombres de archivo estándar ─────────────────────────────────────────────
