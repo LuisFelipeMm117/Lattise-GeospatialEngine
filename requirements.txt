@@ -1,27 +1,24 @@
+# ── Motor geoespacial-económico (spatial/, serio/) — SEW · SSD · SEE ───────
 geopandas>=0.14.0
 shapely>=2.0.0
 pandas>=2.0.0
 numpy>=1.26.0
 pyarrow>=14.0.0
 pyproj>=3.6.0
-geopandas>=0.14.0
-shapely>=2.0.0
-pandas>=2.0.0
-numpy>=1.26.0
-pyarrow>=14.0.0
-pyproj>=3.6.0
-
-# Stage 9 — Visualization Layer (spatial/visualization/maps.py)
+ 
+# ── Stage 9 — Visualization Layer (spatial/visualization/maps.py) ──────────
 matplotlib>=3.8.0
-
-# Stage 8 — pendiente (Phase 3, requiere panel DENUE)
+ 
+# ── Lattise Studio (app/) — capa de aplicación sobre el motor ──────────────
+streamlit>=1.35.0
+plotly>=5.0
+networkx>=3.0
+python-louvain>=0.16
+ 
+# ── SEE-Estimación — pendiente (Phase 3, requiere panel DENUE) ─────────────
 # libpysal>=4.9.0
 # spreg>=1.4.0
-
+ 
+# ── Testing ──────────────────────────────────────────────────────────────
 pytest>=8.0.0
-
-# Stage 8 — pendiente (Phase 3, requiere panel DENUE)
-# libpysal>=4.9.0
-# spreg>=1.4.0
-
-pytest>=8.0.0
+ 

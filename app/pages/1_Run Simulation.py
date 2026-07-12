@@ -24,6 +24,7 @@ import time
 from pathlib import Path
 
 import plotly.express as px
+import plotly.graph_objects as go
 import streamlit as st
 
 # ── Resolución de rutas del repo (app/pages/ → app/ → repo root) ───────────
@@ -369,6 +370,67 @@ div[data-testid="stButton"] > button[kind="secondary"]:hover {
 
 /* ── Exportaciones ────────────────────────────────────────────── */
 .export-row { display: flex; gap: 10px; margin-top: 6px; }
+
+/* ── AGEB Detail Panel ───────────────────────────────────────── */
+.detail-panel {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 16px 20px;
+}
+.detail-panel.empty {
+    color: var(--muted-dim);
+    font-size: 13px;
+    text-align: center;
+    padding: 26px 20px;
+    border-style: dashed;
+}
+.detail-header {
+    display: flex; align-items: baseline; justify-content: space-between;
+    flex-wrap: wrap; gap: 6px;
+    border-bottom: 1px solid var(--border-lo);
+    padding-bottom: 10px; margin-bottom: 12px;
+}
+.detail-id {
+    font-family: 'Space Mono', monospace;
+    font-size: 15px; font-weight: 700; color: var(--text);
+}
+.detail-sub { font-size: 12px; color: var(--muted); }
+.detail-stats {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 0;
+}
+.detail-stat { padding: 2px 16px; border-left: 1px solid var(--border-lo); }
+.detail-stat:first-child { border-left: none; padding-left: 2px; }
+.detail-stat-label {
+    font-family: 'Space Mono', monospace;
+    font-size: 9px; letter-spacing: 1.3px; text-transform: uppercase;
+    color: var(--muted-dim); margin-bottom: 4px;
+}
+.detail-stat-value { font-family: 'Space Mono', monospace; font-size: 1rem; font-weight: 700; color: var(--text); }
+.detail-stat-value.accent { color: var(--accent); }
+.detail-badges { margin-top: 12px; }
+.chip.warn { border-color: var(--warn); color: var(--warn); }
+
+/* ── Ranking — fila seleccionable ────────────────────────────── */
+.rank-row-wrap { display: flex; align-items: center; gap: 6px; }
+.rank-row-wrap.selected .rank-item { background: var(--accent-soft); border-radius: 8px; padding-left: 8px; margin-left: -8px; }
+.rank-row-wrap.selected .rank-name { color: var(--accent) !important; }
+div[data-testid="stButton"].rank-select-btn > button,
+.rank-select-col div[data-testid="stButton"] > button {
+    background: transparent !important;
+    border: 1px solid var(--border) !important;
+    color: var(--muted) !important;
+    padding: 4px 0 !important;
+    min-height: 30px !important;
+    font-size: 13px !important;
+    width: 100%;
+}
+.rank-select-col div[data-testid="stButton"] > button:hover {
+    border-color: var(--accent) !important;
+    color: var(--accent) !important;
+}
 </style>
 """, unsafe_allow_html=True)
 
@@ -609,6 +671,34 @@ def render_map_block(gdf, sector_label: str):
         coloraxis_showscale=False,
     )
 
+    # ── Highlight del AGEB seleccionado (map ↔ ranking ↔ detail panel,
+    # mismo `session_state["selected_ageb_id"]`) — overlay puramente visual,
+    # ninguna columna ni valor nuevo, solo resalta un punto ya existente. ──
+    selected_id = st.session_state.get("selected_ageb_id")
+    if selected_id is not None:
+        sel_mask = gdf_wgs84[AGEB_ID_COL].astype(str) == str(selected_id)
+        if sel_mask.any():
+            sel_geom = gdf_wgs84.loc[sel_mask, "geometry"].iloc[0]
+            sel_centroid = sel_geom.centroid
+            fig.add_trace(go.Scattermapbox(
+                lat=[sel_centroid.y], lon=[sel_centroid.x],
+                mode="markers",
+                marker=dict(size=26, color="rgba(244,245,247,0.0)"),
+                hoverinfo="skip", showlegend=False,
+            ))
+            fig.add_trace(go.Scattermapbox(
+                lat=[sel_centroid.y], lon=[sel_centroid.x],
+                mode="markers",
+                marker=dict(size=20, color="#F4F5F7", opacity=0.9),
+                hoverinfo="skip", showlegend=False,
+            ))
+            fig.add_trace(go.Scattermapbox(
+                lat=[sel_centroid.y], lon=[sel_centroid.x],
+                mode="markers",
+                marker=dict(size=12, color="#F5B942"),
+                hoverinfo="skip", showlegend=False,
+            ))
+
     st.markdown('<div class="map-card">', unsafe_allow_html=True)
     map_event = st.plotly_chart(
         fig,
@@ -624,7 +714,14 @@ def render_map_block(gdf, sector_label: str):
     if map_event and map_event.get("selection", {}).get("point_indices"):
         idx_sel = map_event["selection"]["point_indices"][0]
         if 0 <= idx_sel < len(gdf_wgs84):
-            st.session_state["selected_ageb_id"] = str(gdf_wgs84.iloc[idx_sel][AGEB_ID_COL])
+            new_id = str(gdf_wgs84.iloc[idx_sel][AGEB_ID_COL])
+            if new_id != st.session_state.get("selected_ageb_id"):
+                # `st.rerun()` evita el desfase de un rerun entre el click y
+                # el highlight/panel de detalle/ranking — sin esto, el mapa
+                # ya renderizado con la selección ANTERIOR se mostraría un
+                # instante antes de reflejar el nuevo AGEB elegido.
+                st.session_state["selected_ageb_id"] = new_id
+                st.rerun()
 
     # ── Leyenda flotante + chip de fullscreen (overlay sobre el mapa) ──
     grad_css = {
@@ -657,6 +754,91 @@ def render_map_block(gdf, sector_label: str):
     return gdf_map, value_col
 
 
+def render_detail_panel(gdf_map, value_col: str, var_label: str):
+    """Panel de detalle del AGEB seleccionado (clic en el mapa o en el
+    ranking, mismo `st.session_state["selected_ageb_id"]`). Solo lectura y
+    formato sobre columnas ya producidas por el motor (IMPACTO_DIRECTO_COL,
+    IMPACTO_INDIRECTO_COL, IMPACTO_PROPAGADO_COL, es_isla) y sobre
+    `participacion_pct`/`municipio` ya calculadas en `_prepare_map_data` —
+    ninguna magnitud económica nueva se deriva aquí."""
+    st.markdown(
+        '<div class="section-label" style="display:flex; align-items:baseline; '
+        'justify-content:space-between;">'
+        '<span>AGEB Detail</span></div>',
+        unsafe_allow_html=True,
+    )
+
+    selected_id = st.session_state.get("selected_ageb_id")
+
+    if not selected_id:
+        st.markdown(
+            '<div class="detail-panel empty">Click an AGEB on the map, or select one from the '
+            'ranking below, to inspect its detail.</div>',
+            unsafe_allow_html=True,
+        )
+        return
+
+    if gdf_map is None or gdf_map.empty:
+        st.markdown(
+            '<div class="detail-panel empty">No spatial result available to look up this AGEB.</div>',
+            unsafe_allow_html=True,
+        )
+        return
+
+    match = gdf_map[gdf_map[AGEB_ID_COL].astype(str) == str(selected_id)]
+    if match.empty:
+        st.markdown(
+            f'<div class="detail-panel empty">AGEB <b>{selected_id}</b> is not present in the '
+            'current result (it may lack geometry, or belong to a previous simulation).</div>',
+            unsafe_allow_html=True,
+        )
+        return
+
+    row = match.iloc[0]
+    ranked = gdf_map.sort_values(value_col, ascending=False).reset_index(drop=True)
+    rank_matches = ranked.index[ranked[AGEB_ID_COL].astype(str) == str(selected_id)]
+    rank_pos = int(rank_matches[0]) + 1 if len(rank_matches) else None
+    n_total = len(ranked)
+
+    isla_badge = (
+        '<span class="chip warn">⚠ Isolated AGEB — no spatial neighbors in the propagation graph</span>'
+        if bool(row.get("es_isla", False)) else ""
+    )
+    rank_txt = f"Rank #{rank_pos} of {n_total} by {var_label}" if rank_pos else f"of {n_total} AGEBs"
+
+    _md(f"""
+    <div class="detail-panel">
+        <div class="detail-header">
+            <div class="detail-id">AGEB {row[AGEB_ID_COL]}</div>
+            <div class="detail-sub">Municipio {row['municipio']} · {rank_txt}</div>
+        </div>
+        <div class="detail-stats">
+            <div class="detail-stat">
+                <div class="detail-stat-label">Direct Impact</div>
+                <div class="detail-stat-value">{format_money(row[IMPACTO_DIRECTO_COL])}</div>
+            </div>
+            <div class="detail-stat">
+                <div class="detail-stat-label">Indirect Impact</div>
+                <div class="detail-stat-value">{format_money(row[IMPACTO_INDIRECTO_COL])}</div>
+            </div>
+            <div class="detail-stat">
+                <div class="detail-stat-label">Propagated Impact</div>
+                <div class="detail-stat-value accent">{format_money(row[IMPACTO_PROPAGADO_COL])}</div>
+            </div>
+            <div class="detail-stat">
+                <div class="detail-stat-label">Share of Total ({var_label})</div>
+                <div class="detail-stat-value">{row['participacion_pct']:.2f}%</div>
+            </div>
+        </div>
+        {f'<div class="detail-badges">{isla_badge}</div>' if isla_badge else ''}
+    </div>
+    """)
+
+    if st.button("✕ Clear selection", key="clear_selection_btn"):
+        st.session_state["selected_ageb_id"] = None
+        st.rerun()
+
+
 # ══════════════════════════════════════════════════════════
 # RENDER — resultado completo (jerarquía: summary → map → kpi → insights → rank → export)
 # ══════════════════════════════════════════════════════════
@@ -685,6 +867,9 @@ def render_result(report, gdf, scenario: dict):
     st.markdown('<div class="section-label">Spatial Map</div>', unsafe_allow_html=True)
     gdf_map, value_col = render_map_block(gdf, sector_label)
     var_label = [k for k, v in _VARIABLE_OPTIONS.items() if v == value_col][0]
+
+    # ── 2b. AGEB Detail Panel (map ↔ ranking, mismo selected_ageb_id) ──
+    render_detail_panel(gdf_map, value_col, var_label)
 
     # ── 3. KPIs (discretos) ───────────────────────────────────────────
     n_agebs = len(gdf)
@@ -768,10 +953,18 @@ def render_result(report, gdf, scenario: dict):
         # reportado ("no renderiza, se ve el HTML crudo"). Concatenando en
         # una sola línea se evita el problema de raíz — sin tocar ningún
         # valor del motor.
-        rows_html = []
+        #
+        # Cada fila vive en dos columnas: el HTML existente (barra + valor)
+        # a la izquierda, y un botón real de Streamlit a la derecha que
+        # asigna `selected_ageb_id` — mismo estado que ya consume el mapa
+        # (highlight) y el panel de detalle, cerrando el loop de selección
+        # mapa ↔ ranking ↔ detalle.
+        selected_id = st.session_state.get("selected_ageb_id")
         for i, row in df_rank.iterrows():
             pct = min(100.0, abs(float(row[value_col])) / max_val * 100)
-            rows_html.append(
+            row_id = str(row[AGEB_ID_COL])
+            is_selected = row_id == str(selected_id) if selected_id else False
+            row_html = (
                 '<div class="rank-item">'
                 f'<div class="rank-num">#{i + 1:02d}</div>'
                 '<div class="rank-body">'
@@ -785,7 +978,21 @@ def render_result(report, gdf, scenario: dict):
                 f'<div class="rank-value">{format_compact(row[value_col])}</div>'
                 '</div>'
             )
-        st.markdown(f'<div>{"".join(rows_html)}</div>', unsafe_allow_html=True)
+            wrap_class = "rank-row-wrap selected" if is_selected else "rank-row-wrap"
+
+            col_row, col_btn = st.columns([0.92, 0.08])
+            with col_row:
+                st.markdown(f'<div class="{wrap_class}">{row_html}</div>', unsafe_allow_html=True)
+            with col_btn:
+                st.markdown('<div class="rank-select-col">', unsafe_allow_html=True)
+                if st.button(
+                    "◉" if is_selected else "○",
+                    key=f"rank_select_{row_id}",
+                    help=f"Select AGEB {row_id} on the map",
+                ):
+                    st.session_state["selected_ageb_id"] = row_id
+                    st.rerun()
+                st.markdown('</div>', unsafe_allow_html=True)
     else:
         st.caption("No geometry available to build the ranking.")
 
@@ -847,6 +1054,7 @@ def render_empty_state():
 # EJECUCIÓN — API pública existente, sin recálculo de etapas
 # ══════════════════════════════════════════════════════════
 if launch:
+    st.session_state["selected_ageb_id"] = None
     with st.spinner("Running simulation…"):
         try:
             resultado_simulacion = modelo.simular(estado_key, sector_idx, monto_pesos)
