@@ -21,6 +21,7 @@ import json
 import sys
 import textwrap
 import time
+import uuid
 from pathlib import Path
 
 import plotly.express as px
@@ -363,6 +364,7 @@ div[data-testid="stButton"] > button[kind="secondary"]:hover {
 .rank-body .rank-muni { color: var(--muted-dim); font-weight: 400; font-size: 11.5px; }
 .rank-bar-track { height: 6px; background: var(--border-lo); border-radius: 3px; overflow: hidden; }
 .rank-bar-fill { height: 100%; border-radius: 3px; background: linear-gradient(90deg, var(--accent), #8FB4FF); }
+.rank-bar-fill.negative { background: linear-gradient(90deg, #DC2626, #F87171); }
 .rank-value {
     font-family: 'Space Mono', monospace;
     font-size: 12px; color: var(--text); text-align: right;
@@ -431,6 +433,30 @@ div[data-testid="stButton"].rank-select-btn > button,
     border-color: var(--accent) !important;
     color: var(--accent) !important;
 }
+
+/* ── Scenario Manager (Fase 2) ───────────────────────────────── */
+.scenario-manager-wrap { margin: 2px 0 18px 0; }
+.scenario-chip {
+    display: flex; align-items: center; gap: 9px;
+    background: var(--panel-hi);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 8px 12px;
+    min-height: 22px;
+    margin-bottom: 6px;
+    overflow: hidden;
+}
+.scenario-chip.active { border-color: var(--accent); background: var(--accent-soft); }
+.scenario-chip .sc-dot { color: var(--accent); font-size: 9px; flex-shrink: 0; }
+.scenario-chip.active .sc-dot { color: var(--ok); }
+.scenario-chip .sc-text {
+    font-family: 'Space Mono', monospace; font-size: 11.5px;
+    color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.scenario-chip.active .sc-text { color: var(--text); }
+.scenario-manager-empty {
+    font-size: 12.5px; color: var(--muted-dim); padding: 4px 0 14px 0;
+}
 </style>
 """, unsafe_allow_html=True)
 
@@ -484,6 +510,139 @@ def _md(html: str) -> None:
     st.markdown(textwrap.dedent(html).strip(), unsafe_allow_html=True)
 
 
+# ══════════════════════════════════════════════════════════
+# SCENARIO MANAGER (Fase 2) — orquestación de estado pura.
+# Cada entrada de historial envuelve un (gdf, report) ya producidos por
+# `modelo.simular()` + `run_simulation_engine()`; nunca se recalcula ni
+# deriva economía nueva aquí, solo se guardan/activan punteros.
+# ══════════════════════════════════════════════════════════
+MAX_SCENARIO_HISTORY = 8
+
+
+def _scenario_label(scenario: dict) -> str:
+    """Etiqueta compacta para un chip de historial. Presentación pura."""
+    sector_short = str(scenario.get("sector", "—"))[:20]
+    monto = scenario.get("monto_pesos", 0.0)
+    sign = "+" if monto >= 0 else ""
+    rho_val = scenario.get("rho", 0.0)
+    return (
+        f"{scenario.get('estado', '—')} · {sector_short} · "
+        f"{sign}{format_compact(monto)} · ρ{rho_val:.2f}"
+    )
+
+
+def _new_history_entry(scenario: dict, gdf, report) -> dict:
+    """Empaqueta un resultado ya calculado (gdf, report) como entrada de
+    historial. No transforma ni recalcula ningún valor del motor."""
+    return {
+        "id": uuid.uuid4().hex[:8],
+        "label": _scenario_label(scenario),
+        "scenario": scenario,
+        "gdf": gdf,
+        "report": report,
+        "timestamp": time.time(),
+    }
+
+
+def _activate_entry(entry: dict) -> None:
+    """Apunta el estado activo (mismas claves que consumen las páginas
+    2_View Results.py y 4_Spatial_Cluster_Intelligence.py) hacia una
+    entrada del historial ya calculada. Cero recálculo."""
+    st.session_state["active_scenario_id"] = entry["id"]
+    st.session_state["simulation_scenario"] = entry["scenario"]
+    st.session_state["simulation_gdf"] = entry["gdf"]
+    st.session_state["simulation_report"] = entry["report"]
+    st.session_state["simulation_timestamp"] = entry["timestamp"]
+    st.session_state["selected_ageb_id"] = None
+
+
+def render_scenario_manager() -> None:
+    """Tira de chips con los últimos escenarios ya ejecutados en esta
+    sesión. Permite reactivar (sin recomputar) o descartar un escenario, y
+    marcar hasta 2 para el modo de Comparación (Fase 3)."""
+    history = st.session_state.get("scenario_history", [])
+    if not history:
+        return
+
+    valid_ids = {e["id"] for e in history}
+    st.session_state["compare_selection"] = [
+        cid for cid in st.session_state.get("compare_selection", []) if cid in valid_ids
+    ]
+
+    st.markdown('<div class="section-label">Scenario History</div>', unsafe_allow_html=True)
+    st.markdown('<div class="scenario-manager-wrap">', unsafe_allow_html=True)
+
+    active_id = st.session_state.get("active_scenario_id")
+    compare_sel = st.session_state["compare_selection"]
+    for entry in history:
+        is_active = entry["id"] == active_id
+        wrap_class = "scenario-chip active" if is_active else "scenario-chip"
+        c_cmp, c_label, c_go, c_del = st.columns([0.08, 0.70, 0.11, 0.11])
+        with c_cmp:
+            was_checked = entry["id"] in compare_sel
+            checked = st.checkbox(
+                "Compare", key=f"cmp_chk_{entry['id']}", value=was_checked,
+                label_visibility="collapsed", help="Select for comparison (max 2)",
+            )
+            if checked and not was_checked:
+                if len(compare_sel) >= 2:
+                    compare_sel.pop(0)
+                compare_sel.append(entry["id"])
+            elif not checked and was_checked:
+                compare_sel.remove(entry["id"])
+        with c_label:
+            marker = "●" if is_active else "○"
+            _md(f"""
+            <div class="{wrap_class}"><span class="sc-dot">{marker}</span>
+            <span class="sc-text">{entry['label']}</span></div>
+            """)
+        with c_go:
+            if st.button(
+                "View", key=f"activate_{entry['id']}",
+                disabled=is_active, use_container_width=True,
+            ):
+                st.session_state["compare_mode"] = False
+                _activate_entry(entry)
+                st.rerun()
+        with c_del:
+            if st.button(
+                "✕", key=f"delete_{entry['id']}", use_container_width=True,
+                help="Discard this scenario",
+            ):
+                st.session_state["scenario_history"] = [
+                    e for e in history if e["id"] != entry["id"]
+                ]
+                if entry["id"] in st.session_state["compare_selection"]:
+                    st.session_state["compare_selection"].remove(entry["id"])
+                if is_active:
+                    remaining = st.session_state["scenario_history"]
+                    if remaining:
+                        _activate_entry(remaining[0])
+                    else:
+                        for k in (
+                            "active_scenario_id", "simulation_scenario",
+                            "simulation_gdf", "simulation_report",
+                            "simulation_timestamp", "selected_ageb_id",
+                        ):
+                            st.session_state.pop(k, None)
+                st.rerun()
+
+    st.session_state["compare_selection"] = compare_sel
+    n_sel = len(compare_sel)
+    c_info, c_btn = st.columns([0.8, 0.2])
+    with c_info:
+        st.caption(f"{n_sel}/2 scenarios selected for comparison.")
+    with c_btn:
+        if st.button(
+            "⇄ Compare", key="btn_open_compare", use_container_width=True,
+            disabled=n_sel != 2, type="primary" if n_sel == 2 else "secondary",
+        ):
+            st.session_state["compare_mode"] = True
+            st.rerun()
+
+    st.markdown('</div>', unsafe_allow_html=True)
+
+
 # Columnas de impacto ya producidas por el motor — solo se eligen para
 # visualización, no se derivan valores nuevos.
 _VARIABLE_OPTIONS = {
@@ -512,6 +671,14 @@ _has_result = "simulation_report" in st.session_state and "simulation_gdf" in st
 
 if "selected_ageb_id" not in st.session_state:
     st.session_state["selected_ageb_id"] = None
+if "scenario_history" not in st.session_state:
+    st.session_state["scenario_history"] = []
+if "active_scenario_id" not in st.session_state:
+    st.session_state["active_scenario_id"] = None
+if "compare_selection" not in st.session_state:
+    st.session_state["compare_selection"] = []
+if "compare_mode" not in st.session_state:
+    st.session_state["compare_mode"] = False
 
 # ══════════════════════════════════════════════════════════
 # HEADER
@@ -1034,6 +1201,186 @@ def render_result(report, gdf, scenario: dict):
         )
 
 
+def _render_compare_map(gdf, sector_label: str, key_suffix: str):
+    """Mapa estático (sin toolbar interactiva) para el modo Comparación.
+    Misma preparación de datos que render_map_block (_prepare_map_data),
+    fija variable=Propagated Impact para que ambos lados sean comparables.
+    Solo lectura sobre columnas ya producidas por el motor."""
+    gdf_geo = gdf[gdf.geometry.notna()]
+    if gdf_geo.empty:
+        st.markdown(
+            '<div class="map-placeholder">No spatial geometry available for this result.</div>',
+            unsafe_allow_html=True,
+        )
+        return
+
+    value_col = IMPACTO_PROPAGADO_COL
+    gdf_map, n_sin_geom = _prepare_map_data(gdf, value_col, sector_label)
+    try:
+        gdf_wgs84 = gdf_map.to_crs(epsg=4326)
+    except Exception:
+        gdf_wgs84 = gdf_map
+
+    geojson = json.loads(gdf_wgs84.to_json())
+    centroid = gdf_wgs84.geometry.unary_union.centroid
+
+    fig = px.choropleth_mapbox(
+        gdf_wgs84, geojson=geojson, locations=gdf_wgs84.index,
+        mapbox_style="carto-darkmatter", zoom=6.5,
+        center={"lat": centroid.y, "lon": centroid.x},
+        opacity=0.80, color=value_col, color_continuous_scale="Blues",
+    )
+    fig.update_traces(
+        customdata=gdf_wgs84[[AGEB_ID_COL, "municipio", value_col]].values,
+        hovertemplate=(
+            "<b>AGEB %{customdata[0]}</b><br>Municipio %{customdata[1]}<br>"
+            "Propagated Impact: %{customdata[2]:,.2f}<extra></extra>"
+        ),
+    )
+    fig.update_layout(
+        margin=dict(l=0, r=0, t=0, b=0), height=420,
+        paper_bgcolor="#0D1219", plot_bgcolor="#0D1219",
+        font=dict(family="Inter", color="#F4F5F7", size=10),
+        showlegend=False, coloraxis_showscale=False,
+    )
+    st.plotly_chart(
+        fig, use_container_width=True,
+        config={"scrollZoom": False, "displaylogo": False},
+        key=f"cmp_map_{key_suffix}",
+    )
+    if n_sin_geom > 0:
+        st.caption(f"⚠ {n_sin_geom} AGEB(s) without geometry, excluded.")
+
+
+def _compare_side(entry: dict) -> None:
+    """Columna de comparación: resumen + KPIs + mapa estático de una
+    entrada de historial. Presentación pura sobre report/gdf ya calculados."""
+    scenario = entry["scenario"]
+    report = entry["report"]
+    gdf = entry["gdf"]
+    sector_label = scenario.get("sector", "—")
+
+    _md(f"""
+    <div class="scenario-chip active" style="margin-bottom:10px;">
+        <span class="sc-text">{entry['label']}</span>
+    </div>
+    """)
+
+    mult_txt = (
+        f"{report.multiplicador_global:.2f}×"
+        if report.multiplicador_global is not None else "—"
+    )
+    n_agebs = len(gdf)
+    n_afectadas = int((gdf[IMPACTO_PROPAGADO_COL].abs() > 0).sum())
+
+    _md(f"""
+    <div class="kpi-strip">
+        <div class="kpi-item">
+            <div class="kpi-label">Direct Impact</div>
+            <div class="kpi-value">{format_money(report.shock_total_inicial)}</div>
+        </div>
+        <div class="kpi-item">
+            <div class="kpi-label">Spatial Impact</div>
+            <div class="kpi-value accent">{format_money(report.shock_total_propagado)}</div>
+        </div>
+        <div class="kpi-item">
+            <div class="kpi-label">Multiplier</div>
+            <div class="kpi-value">{mult_txt}</div>
+        </div>
+        <div class="kpi-item">
+            <div class="kpi-label">AGEBs Affected</div>
+            <div class="kpi-value">{n_afectadas:,} / {n_agebs:,}</div>
+        </div>
+    </div>
+    """)
+
+    _render_compare_map(gdf, sector_label, key_suffix=entry["id"])
+
+
+def render_compare_view(entry_a: dict, entry_b: dict) -> None:
+    """Vista lado a lado de dos escenarios ya calculados (Fase 3). No
+    recalcula economía: solo lee report/gdf de las entradas de historial
+    seleccionadas y muestra deltas de presentación entre ambas."""
+    c_title, c_back = st.columns([0.85, 0.15])
+    with c_title:
+        st.markdown('<div class="section-label">Scenario Comparison</div>', unsafe_allow_html=True)
+    with c_back:
+        if st.button("← Back", key="btn_close_compare", use_container_width=True):
+            st.session_state["compare_mode"] = False
+            st.rerun()
+
+    col_a, col_b = st.columns(2)
+    with col_a:
+        _compare_side(entry_a)
+    with col_b:
+        _compare_side(entry_b)
+
+    # ── Delta summary — siempre calculable, sin importar si los dos
+    # escenarios comparten estado/sector (aritmética sobre report, no
+    # sobre columnas espaciales). ──────────────────────────────────
+    report_a, report_b = entry_a["report"], entry_b["report"]
+    d_spatial = report_b.shock_total_propagado - report_a.shock_total_propagado
+    mult_a = report_a.multiplicador_global or 0.0
+    mult_b = report_b.multiplicador_global or 0.0
+    d_mult = mult_b - mult_a
+    n_af_a = int((entry_a["gdf"][IMPACTO_PROPAGADO_COL].abs() > 0).sum())
+    n_af_b = int((entry_b["gdf"][IMPACTO_PROPAGADO_COL].abs() > 0).sum())
+
+    st.markdown('<div class="section-label">Delta (B − A)</div>', unsafe_allow_html=True)
+    _md(f"""
+    <div class="kpi-strip">
+        <div class="kpi-item">
+            <div class="kpi-label">Δ Spatial Impact</div>
+            <div class="kpi-value accent">{format_money(d_spatial)}</div>
+        </div>
+        <div class="kpi-item">
+            <div class="kpi-label">Δ Multiplier</div>
+            <div class="kpi-value">{d_mult:+.2f}×</div>
+        </div>
+        <div class="kpi-item">
+            <div class="kpi-label">Δ AGEBs Affected</div>
+            <div class="kpi-value">{n_af_b - n_af_a:+,}</div>
+        </div>
+    </div>
+    """)
+
+    # ── Top divergencia por AGEB — solo cuando ambos escenarios viven en
+    # el mismo estado (misma malla de AGEBs), condición explícita, no
+    # inferida. ───────────────────────────────────────────────────────
+    same_state = entry_a["scenario"].get("estado_key") == entry_b["scenario"].get("estado_key")
+    if same_state:
+        st.markdown('<div class="section-label">Top Divergent AGEBs</div>', unsafe_allow_html=True)
+        ga = entry_a["gdf"][[AGEB_ID_COL, IMPACTO_PROPAGADO_COL]].rename(
+            columns={IMPACTO_PROPAGADO_COL: "impacto_a"})
+        gb = entry_b["gdf"][[AGEB_ID_COL, IMPACTO_PROPAGADO_COL]].rename(
+            columns={IMPACTO_PROPAGADO_COL: "impacto_b"})
+        merged = ga.merge(gb, on=AGEB_ID_COL, how="inner")
+        merged["diff"] = merged["impacto_b"] - merged["impacto_a"]
+        top_div = merged.reindex(merged["diff"].abs().sort_values(ascending=False).index).head(10)
+        if top_div.empty:
+            st.caption("No overlapping AGEBs to compare.")
+        else:
+            max_val = float(top_div["diff"].abs().max()) or 1.0
+            for _, row in top_div.iterrows():
+                pct = min(100.0, abs(float(row["diff"])) / max_val * 100)
+                sign_class = "" if row["diff"] >= 0 else "negative"
+                row_html = (
+                    '<div class="rank-item">'
+                    f'<div class="rank-body"><div class="rank-name"><span>AGEB {row[AGEB_ID_COL]}</span></div>'
+                    '<div class="rank-bar-track">'
+                    f'<div class="rank-bar-fill {sign_class}" style="width:{pct:.1f}%;"></div>'
+                    '</div></div>'
+                    f'<div class="rank-value">{format_compact(row["diff"])}</div>'
+                    '</div>'
+                )
+                st.markdown(f'<div class="rank-row-wrap">{row_html}</div>', unsafe_allow_html=True)
+    else:
+        st.caption(
+            "Scenarios belong to different states — per-AGEB divergence is not "
+            "comparable across disjoint spatial grids. Showing aggregate deltas only."
+        )
+
+
 def render_empty_state():
     _md("""
     <div class="exec-summary">
@@ -1051,7 +1398,11 @@ def render_empty_state():
 
 
 # ══════════════════════════════════════════════════════════
-# EJECUCIÓN — API pública existente, sin recálculo de etapas
+# EJECUCIÓN — API pública existente, sin recálculo de etapas.
+# Fase 2: cada corrida se empaqueta como entrada de scenario_history y
+# se activa; el render de abajo lee SIEMPRE desde el puntero activo
+# (mismas claves de session_state que ya consumen 2_View Results.py y
+# 4_Spatial_Cluster_Intelligence.py) — fuente de verdad única.
 # ══════════════════════════════════════════════════════════
 if launch:
     st.session_state["selected_ageb_id"] = None
@@ -1059,8 +1410,10 @@ if launch:
         try:
             resultado_simulacion = modelo.simular(estado_key, sector_idx, monto_pesos)
             gdf_final, report = run_simulation_engine(resultado_simulacion, rho)
-
-            st.session_state["simulation_scenario"] = {
+        except Exception as e:
+            st.error(f"Simulation failed: {e}")
+        else:
+            scenario_dict = {
                 "estado": estado_nombre,
                 "estado_key": estado_key,
                 "sector": sector_name,
@@ -1068,19 +1421,32 @@ if launch:
                 "monto_pesos": monto_pesos,
                 "rho": rho,
             }
-            st.session_state["simulation_gdf"] = gdf_final
-            st.session_state["simulation_report"] = report
-            st.session_state["simulation_timestamp"] = time.time()
+            entry = _new_history_entry(scenario_dict, gdf_final, report)
+            history = st.session_state.setdefault("scenario_history", [])
+            history.insert(0, entry)
+            del history[MAX_SCENARIO_HISTORY:]
+            _activate_entry(entry)
 
-        except Exception as e:
-            st.error(f"Simulation failed: {e}")
-        else:
-            render_result(report, gdf_final, st.session_state["simulation_scenario"])
-elif _has_result:
-    render_result(
-        st.session_state["simulation_report"],
-        st.session_state["simulation_gdf"],
-        st.session_state.get("simulation_scenario", {}),
-    )
+render_scenario_manager()
+
+_history_by_id = {e["id"]: e for e in st.session_state.get("scenario_history", [])}
+_compare_ids = st.session_state.get("compare_selection", [])
+_compare_ready = (
+    st.session_state.get("compare_mode")
+    and len(_compare_ids) == 2
+    and all(cid in _history_by_id for cid in _compare_ids)
+)
+
+if _compare_ready:
+    render_compare_view(_history_by_id[_compare_ids[0]], _history_by_id[_compare_ids[1]])
 else:
-    render_empty_state()
+    st.session_state["compare_mode"] = False
+    _has_result = "simulation_report" in st.session_state and "simulation_gdf" in st.session_state
+    if _has_result:
+        render_result(
+            st.session_state["simulation_report"],
+            st.session_state["simulation_gdf"],
+            st.session_state.get("simulation_scenario", {}),
+        )
+    else:
+        render_empty_state()

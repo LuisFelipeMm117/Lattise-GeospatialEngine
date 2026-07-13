@@ -1,8 +1,8 @@
 # app/Home.py
 """
 Lattise Studio — Home
-Landing page del producto. No contiene lógica económica ni referencias
-al motor interno. Solo orquesta navegación hacia las páginas del MVP.
+Consola de acceso a los módulos de la plataforma. No contiene lógica
+económica ni referencias al motor interno — solo navegación.
 """
 import streamlit as st
 
@@ -14,27 +14,31 @@ st.set_page_config(
 )
 
 # ══════════════════════════════════════════════════════════
-# CSS GLOBAL
+# CSS GLOBAL — consola operativa (Bloomberg Terminal / Palantir Gotham)
 # ══════════════════════════════════════════════════════════
 st.markdown("""
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Space+Mono:wght@400;700&display=swap');
 
 :root {
-    --bg:        #0B0F17;
-    --bg-alt:    #10151F;
-    --panel:     #131A26;
-    --panel-hi:  #1A2333;
-    --border:    #232C3D;
-    --text:      #F4F5F7;
-    --muted:     #8A93A6;
-    --muted-dim: #5C6478;
-    --accent:    #5B8DEF;
-    --accent-soft: rgba(91,141,239,0.12);
+    --bg:        #05070C;
+    --panel:     #0B0F17;
+    --panel-hi:  #121826;
+    --border:    #1C2434;
+    --border-hi: #2A3448;
+    --text:      #E8EAEE;
+    --muted:     #7C8598;
+    --muted-dim: #4C5568;
+    --accent:    #4E86F5;
+    --accent-dim: #2C4A87;
+    --ok:        #2FBF83;
+    --warn:      #E0A93E;
+    --mono:      'Space Mono', monospace;
+    --sans:      'Inter', sans-serif;
 }
 
 html, body, .stApp { background: var(--bg) !important; }
-* { font-family: 'Inter', sans-serif; }
+* { font-family: var(--sans); }
 
 header {visibility: hidden;}
 [data-testid="stToolbar"]     {display: none;}
@@ -44,28 +48,30 @@ footer {visibility: hidden;}
 #MainMenu {visibility: hidden;}
 
 .block-container {
-    max-width: 1180px;
-    padding-top: 2rem;
+    max-width: 1240px;
+    padding-top: 1.6rem;
     padding-bottom: 2rem;
 }
 
-/* ── Botones Streamlit reestilizados ─────────────────────── */
+/* ── Botones Streamlit reestilizados — rectos, sin gradientes ────── */
 div[data-testid="stButton"] > button {
-    border-radius: 10px;
+    border-radius: 4px;
     font-weight: 600;
-    font-size: 15px;
-    padding: 10px 22px;
-    transition: all 0.15s ease;
-    border: 1px solid var(--border);
+    font-size: 13.5px;
+    font-family: var(--sans);
+    padding: 9px 18px;
+    transition: all 0.12s ease;
+    border: 1px solid var(--border-hi);
+    letter-spacing: 0.2px;
 }
 div[data-testid="stButton"] > button[kind="primary"] {
     background: var(--accent);
     border: 1px solid var(--accent);
-    color: white;
+    color: #05070C;
 }
 div[data-testid="stButton"] > button[kind="primary"]:hover {
-    background: #4A78D6;
-    border-color: #4A78D6;
+    background: #6A9BF9;
+    border-color: #6A9BF9;
 }
 div[data-testid="stButton"] > button[kind="secondary"] {
     background: transparent;
@@ -74,184 +80,130 @@ div[data-testid="stButton"] > button[kind="secondary"] {
 div[data-testid="stButton"] > button[kind="secondary"]:hover {
     border-color: var(--muted);
     color: var(--text);
+    background: var(--panel-hi);
 }
 
-/* ── Tipografía utilitaria ────────────────────────────────── */
+/* ── Tipografía utilitaria ─────────────────────────────────────── */
 .kicker {
-    font-family: 'Space Mono', monospace;
-    font-size: 12px;
-    letter-spacing: 3px;
-    text-transform: uppercase;
-    color: var(--accent);
-    margin-bottom: 18px;
+    font-family: var(--mono); font-size: 11px; letter-spacing: 3px;
+    text-transform: uppercase; color: var(--accent); margin-bottom: 14px;
 }
 .section-label {
-    font-family: 'Space Mono', monospace;
-    font-size: 11px;
-    letter-spacing: 3px;
-    text-transform: uppercase;
-    color: var(--muted-dim);
-    text-align: center;
-    margin-bottom: 10px;
+    font-family: var(--mono); font-size: 10.5px; letter-spacing: 3px;
+    text-transform: uppercase; color: var(--muted-dim); margin-bottom: 8px;
 }
 .section-title {
-    font-size: 2rem;
-    font-weight: 700;
-    color: var(--text);
-    text-align: center;
-    margin: 0 0 12px 0;
-    letter-spacing: -0.5px;
+    font-size: 1.55rem; font-weight: 700; color: var(--text);
+    margin: 0 0 6px 0; letter-spacing: -0.4px;
 }
 .section-sub {
-    color: var(--muted);
-    text-align: center;
-    font-size: 15px;
-    max-width: 560px;
-    margin: 0 auto 48px auto;
-    line-height: 1.6;
+    color: var(--muted); font-size: 13.5px; max-width: 640px;
+    margin: 0 0 28px 0; line-height: 1.6;
 }
 
-/* ── Hero ─────────────────────────────────────────────────── */
-.hero {
-    padding: 64px 0 40px 0;
-    text-align: center;
+/* ── Status bar superior (metadata técnica, estilo terminal) ─────── */
+.statusbar {
+    display: flex; align-items: center; justify-content: space-between;
+    border: 1px solid var(--border); border-radius: 6px;
+    background: var(--panel); padding: 9px 16px; margin-bottom: 28px;
+    font-family: var(--mono); font-size: 10.5px; letter-spacing: 1px;
+    color: var(--muted); flex-wrap: wrap; gap: 8px;
 }
+.statusbar .dot-ok {
+    display: inline-block; width: 6px; height: 6px; border-radius: 50%;
+    background: var(--ok); margin-right: 7px; box-shadow: 0 0 6px var(--ok);
+}
+.statusbar .divider-v { color: var(--border-hi); }
+
+/* ── Hero ─────────────────────────────────────────────────────── */
+.hero { padding: 8px 0 8px 0; }
 .hero-title {
-    font-size: 4.2rem;
-    font-weight: 800;
-    letter-spacing: -2.5px;
-    line-height: 1.02;
-    margin: 0;
-    background: linear-gradient(180deg, #FFFFFF 0%, #AEB8CC 100%);
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
+    font-size: 3.1rem; font-weight: 800; letter-spacing: -1.8px;
+    line-height: 1.03; margin: 0; color: var(--text);
 }
 .hero-sub {
-    color: var(--muted);
-    font-size: 1.15rem;
-    max-width: 620px;
-    margin: 26px auto 0 auto;
-    line-height: 1.65;
-    font-weight: 400;
+    color: var(--muted); font-size: 15px; max-width: 620px;
+    margin: 18px 0 0 0; line-height: 1.65; font-weight: 400;
 }
 
-/* ── Flow (How it works) ─────────────────────────────────── */
-.flow-wrap {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 0;
-    max-width: 420px;
-    margin: 0 auto;
+/* ── Módulos (grid de navegación primaria) ───────────────────────── */
+.mod-card {
+    background: var(--panel); border: 1px solid var(--border);
+    border-radius: 8px; padding: 20px 22px; height: 100%;
+    display: flex; flex-direction: column; gap: 10px;
+    transition: border-color 0.12s ease;
 }
-.flow-step {
-    width: 100%;
-    background: var(--panel);
-    border: 1px solid var(--border);
-    border-radius: 12px;
-    padding: 16px 22px;
-    display: flex;
-    align-items: center;
-    gap: 14px;
+.mod-card:hover { border-color: var(--border-hi); }
+.mod-head { display: flex; align-items: center; justify-content: space-between; }
+.mod-index {
+    font-family: var(--mono); font-size: 11px; color: var(--muted-dim); letter-spacing: 1px;
 }
-.flow-num {
-    font-family: 'Space Mono', monospace;
-    font-size: 12px;
-    color: var(--accent);
-    background: var(--accent-soft);
-    border-radius: 6px;
-    width: 26px;
-    height: 26px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    flex-shrink: 0;
+.mod-badge {
+    font-family: var(--mono); font-size: 9.5px; letter-spacing: 1.5px;
+    text-transform: uppercase; padding: 2px 8px; border-radius: 3px;
+    border: 1px solid var(--border-hi); color: var(--muted);
 }
-.flow-text {
-    color: var(--text);
-    font-size: 15px;
-    font-weight: 500;
-}
-.flow-arrow {
-    color: var(--muted-dim);
-    font-size: 18px;
-    padding: 6px 0;
+.mod-badge.core { color: var(--ok); border-color: rgba(47,191,131,0.35); background: rgba(47,191,131,0.06); }
+.mod-badge.new  { color: var(--accent); border-color: rgba(78,134,245,0.4); background: rgba(78,134,245,0.08); }
+.mod-title { font-size: 1.02rem; font-weight: 700; color: var(--text); letter-spacing: -0.2px; }
+.mod-desc { color: var(--muted); font-size: 12.5px; line-height: 1.55; flex-grow: 1; }
+.mod-tags { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 2px; }
+.mod-tag {
+    font-family: var(--mono); font-size: 9.5px; color: var(--muted);
+    border: 1px solid var(--border); border-radius: 3px; padding: 2px 7px;
 }
 
-/* ── Tarjetas genéricas ───────────────────────────────────── */
-.card {
-    background: var(--panel);
-    border: 1px solid var(--border);
-    border-radius: 14px;
-    padding: 26px 24px;
-    height: 100%;
-    transition: border-color 0.15s ease, transform 0.15s ease;
-}
-.card:hover {
-    border-color: #34405A;
-    transform: translateY(-2px);
-}
-.card-icon {
-    font-size: 26px;
-    margin-bottom: 14px;
-    display: block;
-}
-.card-title {
-    color: var(--text);
-    font-weight: 600;
-    font-size: 16px;
-    margin-bottom: 6px;
-}
-.card-desc {
-    color: var(--muted);
-    font-size: 13.5px;
-    line-height: 1.55;
+/* ── Tags de casos de uso (chips monoespaciados) ─────────────────── */
+.tag-strip { display: flex; flex-wrap: wrap; gap: 8px; }
+.usecase-tag {
+    font-family: var(--mono); font-size: 11.5px; color: var(--text);
+    background: var(--panel); border: 1px solid var(--border);
+    border-radius: 4px; padding: 8px 14px; letter-spacing: 0.3px;
 }
 
-.usecase-card {
-    background: var(--panel);
-    border: 1px solid var(--border);
-    border-radius: 12px;
-    padding: 18px 20px;
-    height: 100%;
-}
-.usecase-title {
-    color: var(--text);
-    font-weight: 600;
-    font-size: 14.5px;
-}
-
-/* ── Divider ──────────────────────────────────────────────── */
-.divider {
-    border: none;
+/* ── Especificaciones de plataforma (lista técnica densa) ─────────── */
+.spec-row {
+    display: flex; gap: 16px; padding: 14px 0;
     border-top: 1px solid var(--border);
-    margin: 72px 0 56px 0;
 }
+.spec-row:last-child { border-bottom: 1px solid var(--border); }
+.spec-code {
+    font-family: var(--mono); font-size: 11px; color: var(--accent);
+    width: 34px; flex-shrink: 0; padding-top: 2px;
+}
+.spec-title { color: var(--text); font-weight: 600; font-size: 14px; margin-bottom: 3px; }
+.spec-desc { color: var(--muted); font-size: 12.5px; line-height: 1.55; max-width: 620px; }
 
-/* ── Footer ───────────────────────────────────────────────── */
-.footer {
-    text-align: center;
-    padding: 40px 0 10px 0;
-}
-.footer-title {
-    color: var(--text);
-    font-weight: 700;
-    font-size: 15px;
-    letter-spacing: -0.2px;
-}
-.footer-sub {
-    color: var(--muted);
-    font-size: 13px;
-    margin-top: 4px;
-}
+/* ── Divider ──────────────────────────────────────────────────── */
+.divider { border: none; border-top: 1px solid var(--border); margin: 44px 0 40px 0; }
+
+/* ── Footer ───────────────────────────────────────────────────── */
+.footer { padding: 28px 0 6px 0; border-top: 1px solid var(--border); }
+.footer-row { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; }
+.footer-title { color: var(--text); font-weight: 700; font-size: 13.5px; letter-spacing: -0.1px; }
+.footer-sub { color: var(--muted-dim); font-size: 11.5px; margin-top: 2px; }
 .footer-powered {
-    color: var(--muted-dim);
-    font-size: 12px;
-    margin-top: 14px;
-    font-family: 'Space Mono', monospace;
-    letter-spacing: 0.5px;
+    color: var(--muted-dim); font-size: 10.5px; font-family: var(--mono);
+    letter-spacing: 1px; text-align: right;
 }
 </style>
+""", unsafe_allow_html=True)
+
+# ══════════════════════════════════════════════════════════
+# STATUS BAR
+# ══════════════════════════════════════════════════════════
+st.markdown("""
+<div class="statusbar">
+  <div><span class="dot-ok"></span>SYSTEM OPERATIONAL</div>
+  <div class="divider-v">·</div>
+  <div>32 ESTADOS</div>
+  <div class="divider-v">·</div>
+  <div>78 SECTORES SCIAN</div>
+  <div class="divider-v">·</div>
+  <div>BASE INEGI 2018</div>
+  <div class="divider-v">·</div>
+  <div>MOTOR FLQ + RAS · LEONTIEF REGIONALIZADO</div>
+</div>
 """, unsafe_allow_html=True)
 
 # ══════════════════════════════════════════════════════════
@@ -259,93 +211,116 @@ div[data-testid="stButton"] > button[kind="secondary"]:hover {
 # ══════════════════════════════════════════════════════════
 st.markdown("""
 <div class="hero">
-  <div class="kicker" style="text-align:center;">◆ SPATIAL ECONOMIC INTELLIGENCE</div>
+  <div class="kicker">◆ SPATIAL ECONOMIC INTELLIGENCE</div>
   <div class="hero-title">Lattise Studio</div>
   <div class="hero-sub">
-    Una plataforma para simular el impacto espacial de cambios económicos
-    utilizando datos oficiales y modelos econométricos.
+    Infraestructura de análisis para simular, mapear y explorar el impacto
+    económico territorial a nivel AGEB, utilizando datos oficiales y un
+    motor de insumo-producto regionalizado.
   </div>
 </div>
 """, unsafe_allow_html=True)
 
-_, c1, c2, _ = st.columns([3, 1.3, 1.3, 3])
-with c1:
-    if st.button("Start Simulation", type="primary", use_container_width=True):
-        st.switch_page("pages/1_Run Simulation.py")
-with c2:
-    if st.button("Learn More", type="secondary", use_container_width=True):
-        st.switch_page("pages/3_About.py")
-
-st.markdown('<hr class="divider">', unsafe_allow_html=True)
+st.markdown('<div style="height:28px;"></div>', unsafe_allow_html=True)
 
 # ══════════════════════════════════════════════════════════
-# HOW IT WORKS
+# MÓDULOS — navegación primaria hacia las 4 páginas del producto
 # ══════════════════════════════════════════════════════════
-st.markdown('<div class="section-label">Process</div>', unsafe_allow_html=True)
-st.markdown('<div class="section-title">How it works</div>', unsafe_allow_html=True)
+st.markdown('<div class="section-label">Módulos</div>', unsafe_allow_html=True)
+st.markdown('<div class="section-title">Plataforma</div>', unsafe_allow_html=True)
 st.markdown(
-    '<div class="section-sub">De una pregunta económica a un mapa de impacto '
-    'territorial, en cinco pasos.</div>',
+    '<div class="section-sub">Cuatro módulos, una sola fuente de verdad: '
+    'el motor geoespacial-económico de Lattise.</div>',
     unsafe_allow_html=True,
 )
 
-flow_steps = [
-    "Select Region",
-    "Choose Economic Sector",
-    "Define Scenario",
-    "Run Simulation",
-    "Explore Spatial Results",
+MODULES = [
+    {
+        "index": "01",
+        "badge": "core", "badge_label": "Simulación",
+        "title": "Launch Workspace",
+        "desc": "Ejecuta un shock de demanda final en un AGEB y sector específico "
+                "y observa su propagación espacial sobre el territorio.",
+        "tags": ["Shock de demanda", "Propagación espacial", "AGEB"],
+        "page": "pages/1_Run Simulation.py",
+    },
+    {
+        "index": "02",
+        "badge": "core", "badge_label": "Resultados",
+        "title": "View Results",
+        "desc": "Consulta y compara los resultados de simulaciones ya ejecutadas, "
+                "con detalle por AGEB y por sector.",
+        "tags": ["Detalle por AGEB", "Comparación", "Export"],
+        "page": "pages/2_View Results.py",
+    },
+    {
+        "index": "03",
+        "badge": "core", "badge_label": "Estructura",
+        "title": "Spatial Cluster Intelligence",
+        "desc": "Comunidades económicas detectadas por Louvain sobre la red "
+                "productiva nacional, regional y de contagio financiero.",
+        "tags": ["Louvain", "Comunidades económicas", "Contagio"],
+        "page": "pages/4_Spatial_Cluster_Intelligence.py",
+    },
+    {
+        "index": "04",
+        "badge": "new", "badge_label": "Nuevo",
+        "title": "Opportunity Explorer",
+        "desc": "Explora el territorio ya simulado: perfil económico por AGEB, "
+                "comunidad, municipio y relaciones espaciales — sin recalcular nada.",
+        "tags": ["Perfil territorial", "Búsqueda", "Insights"],
+        "page": "pages/5_Opportunity_Explorer.py",
+    },
 ]
-flow_html = '<div class="flow-wrap">'
-for i, step in enumerate(flow_steps, start=1):
-    flow_html += f"""
-    <div class="flow-step">
-        <div class="flow-num">{i}</div>
-        <div class="flow-text">{step}</div>
-    </div>
-    """
-    if i < len(flow_steps):
-        flow_html += '<div class="flow-arrow">↓</div>'
-flow_html += '</div>'
-st.markdown(flow_html, unsafe_allow_html=True)
+
+mod_cols = st.columns(4)
+for col, mod in zip(mod_cols, MODULES):
+    with col:
+        tags_html = "".join(f'<span class="mod-tag">{t}</span>' for t in mod["tags"])
+        st.markdown(f"""
+        <div class="mod-card">
+          <div class="mod-head">
+            <span class="mod-index">{mod['index']}</span>
+            <span class="mod-badge {mod['badge']}">{mod['badge_label']}</span>
+          </div>
+          <div class="mod-title">{mod['title']}</div>
+          <div class="mod-desc">{mod['desc']}</div>
+          <div class="mod-tags">{tags_html}</div>
+        </div>
+        """, unsafe_allow_html=True)
+        st.markdown('<div style="height:8px;"></div>', unsafe_allow_html=True)
+        if st.button("Abrir →", key=f"mod_{mod['index']}", use_container_width=True):
+            st.switch_page(mod["page"])
+        st.markdown('<div style="height:6px;"></div>', unsafe_allow_html=True)
 
 st.markdown('<hr class="divider">', unsafe_allow_html=True)
 
 # ══════════════════════════════════════════════════════════
 # USE CASES
 # ══════════════════════════════════════════════════════════
-st.markdown('<div class="section-label">Applications</div>', unsafe_allow_html=True)
-st.markdown('<div class="section-title">Use Cases</div>', unsafe_allow_html=True)
+st.markdown('<div class="section-label">Aplicaciones</div>', unsafe_allow_html=True)
+st.markdown('<div class="section-title">Casos de uso</div>', unsafe_allow_html=True)
 st.markdown(
-    '<div class="section-sub">Diseñado para las decisiones que dependen de '
+    '<div class="section-sub">Diseñado para decisiones que dependen de '
     'dónde ocurre el impacto, no solo de cuánto.</div>',
     unsafe_allow_html=True,
 )
 
 use_cases = [
-    "Nearshoring",
-    "Industrial Investment",
-    "Supply Chains",
-    "Infrastructure Projects",
-    "Economic Policy",
-    "Regional Development",
+    "Nearshoring", "Inversión industrial", "Cadenas de suministro",
+    "Proyectos de infraestructura", "Política económica regional",
+    "Desarrollo territorial", "Banca de desarrollo", "Estudios de pre-factibilidad",
 ]
-uc_cols = st.columns(3)
-for i, uc in enumerate(use_cases):
-    with uc_cols[i % 3]:
-        st.markdown(
-            f'<div class="usecase-card"><div class="usecase-title">{uc}</div></div>',
-            unsafe_allow_html=True,
-        )
-        st.markdown('<div style="height:16px;"></div>', unsafe_allow_html=True)
+tags_html = "".join(f'<span class="usecase-tag">{uc}</span>' for uc in use_cases)
+st.markdown(f'<div class="tag-strip">{tags_html}</div>', unsafe_allow_html=True)
 
 st.markdown('<hr class="divider">', unsafe_allow_html=True)
 
 # ══════════════════════════════════════════════════════════
-# PLATFORM CAPABILITIES
+# PLATFORM CAPABILITIES — lista técnica densa
 # ══════════════════════════════════════════════════════════
-st.markdown('<div class="section-label">Platform</div>', unsafe_allow_html=True)
-st.markdown('<div class="section-title">Platform Capabilities</div>', unsafe_allow_html=True)
+st.markdown('<div class="section-label">Plataforma</div>', unsafe_allow_html=True)
+st.markdown('<div class="section-title">Capacidades</div>', unsafe_allow_html=True)
 st.markdown(
     '<div class="section-sub">Todo lo necesario para pasar de un escenario '
     'a una decisión informada.</div>',
@@ -353,51 +328,50 @@ st.markdown(
 )
 
 capabilities = [
-    ("🗺️", "Spatial Analysis", "Visualiza cómo se distribuye el impacto económico a través del territorio."),
-    ("📊", "Economic Simulation", "Ejecuta escenarios de shock sobre datos oficiales con resultados inmediatos."),
-    ("🏭", "Sector Impact", "Identifica qué sectores absorben y transmiten el impacto de un cambio económico."),
-    ("📈", "Scenario Comparison", "Compara distintos supuestos y magnitudes para evaluar alternativas."),
-    ("💾", "Export Results", "Descarga tus resultados en los formatos que tu equipo ya utiliza."),
-    ("🌎", "Interactive Maps", "Explora el resultado espacial de cada simulación de forma interactiva."),
+    ("01", "Simulación de shocks", "Ejecuta escenarios de demanda final sobre la matriz Leontief regionalizada (FLQ + RAS), con resultados a nivel AGEB."),
+    ("02", "Propagación espacial", "Observa cómo se distribuye un impacto económico a través del territorio mediante el operador de propagación espacial."),
+    ("03", "Comunidades económicas", "Identifica qué sectores y AGEBs conforman comunidades económicas cohesivas, detectadas vía Louvain sobre la red productiva."),
+    ("04", "Exploración territorial", "Perfil de cualquier AGEB, comunidad o municipio — sin ejecutar una nueva simulación — vía Opportunity Explorer."),
+    ("05", "Comparación de escenarios", "Compara distintos supuestos y magnitudes de shock para evaluar alternativas de política o inversión."),
+    ("06", "Export de resultados", "Descarga resultados en CSV, JSON, GeoJSON o PNG, listos para integrarse a reportes y sistemas externos."),
 ]
-cap_cols = st.columns(3)
-for i, (icon, title, desc) in enumerate(capabilities):
-    with cap_cols[i % 3]:
-        st.markdown(f"""
-        <div class="card">
-            <span class="card-icon">{icon}</span>
-            <div class="card-title">{title}</div>
-            <div class="card-desc">{desc}</div>
-        </div>
-        """, unsafe_allow_html=True)
-        st.markdown('<div style="height:16px;"></div>', unsafe_allow_html=True)
+for code, title, desc in capabilities:
+    st.markdown(f"""
+    <div class="spec-row">
+      <div class="spec-code">{code}</div>
+      <div>
+        <div class="spec-title">{title}</div>
+        <div class="spec-desc">{desc}</div>
+      </div>
+    </div>
+    """, unsafe_allow_html=True)
 
 st.markdown('<hr class="divider">', unsafe_allow_html=True)
 
 # ══════════════════════════════════════════════════════════
 # CTA FINAL
 # ══════════════════════════════════════════════════════════
-st.markdown("""
-<div style="text-align:center; padding: 0 0 8px 0;">
-  <div class="section-title" style="font-size:1.7rem;">Ready to see where your impact lands?</div>
-  <div class="section-sub" style="margin-bottom:32px;">
-    Comienza tu primera simulación en menos de un minuto.
-  </div>
-</div>
-""", unsafe_allow_html=True)
-
-_, cta_col, _ = st.columns([3, 1.6, 3])
-with cta_col:
+cta_l, cta_r = st.columns([2.2, 1])
+with cta_l:
+    st.markdown('<div class="section-title" style="margin-bottom:4px;">¿Listo para ver dónde aterriza tu impacto?</div>', unsafe_allow_html=True)
+    st.markdown('<div class="section-sub" style="margin-bottom:0;">Ejecuta tu primera simulación en menos de un minuto, o explora el territorio ya simulado.</div>', unsafe_allow_html=True)
+with cta_r:
     if st.button("Start Simulation →", type="primary", use_container_width=True, key="cta_bottom"):
         st.switch_page("pages/1_Run Simulation.py")
+    if st.button("Opportunity Explorer →", type="secondary", use_container_width=True, key="cta_explorer"):
+        st.switch_page("pages/5_Opportunity_Explorer.py")
 
 # ══════════════════════════════════════════════════════════
 # FOOTER
 # ══════════════════════════════════════════════════════════
-st.markdown("""
+st.markdown(f"""
 <div class="footer">
-  <div class="footer-title">Lattise Studio</div>
-  <div class="footer-sub">Spatial Economic Intelligence Platform</div>
-  <div class="footer-powered">POWERED BY THE LATTISE GEOSPATIAL ENGINE</div>
+  <div class="footer-row">
+    <div>
+      <div class="footer-title">Lattise Studio</div>
+      <div class="footer-sub">Spatial Economic Intelligence Platform</div>
+    </div>
+    <div class="footer-powered">POWERED BY THE LATTISE GEOSPATIAL ENGINE</div>
+  </div>
 </div>
 """, unsafe_allow_html=True)
