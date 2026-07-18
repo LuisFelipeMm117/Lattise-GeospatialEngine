@@ -18,3 +18,20 @@ env/
 .DS_Store
 Thumbs.db
 
+# ── Datos crudos e insumos pesados ──────────────────────────────────────────
+# Stage 1 (inmutable) descargado de INEGI/DENUE — regenerable desde la
+# fuente, no debe versionarse (data/raw/ pesa ~130MB localmente hoy).
+data/raw/
+
+# Scratch de examples/ — no es un artefacto congelado, se regenera cada
+# vez que se corren los scripts de examples/.
+examples/output/
+
+# NOTA para quien decida versionar o no los artefactos congelados
+# (data/warehouse/warehouse.parquet, data/graph/graph.gal,
+# data/analytics/sector_cluster.json, data/ssd/shock_ageb.parquet):
+# hoy NO están trackeados en git ni ignorados aquí a propósito — son
+# pequeños (<1MB c/u) y app/ depende de que existan en disco para
+# funcionar. Decidir explícitamente antes de clonar este repo en un
+# entorno nuevo (ver auditoría, hallazgo sobre artefactos congelados).
+

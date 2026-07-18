@@ -14,11 +14,16 @@ Fuentes de datos — solo lectura de artefactos ya congelados:
     4. spatial.simulation.SpatialMatrix (Stage 8A, CERRADO — AGEBs vecinas)
 
 Ninguna magnitud económica nueva se calcula en esta página. Toda la
-aritmética (comunidad/sector dominante, participación, disolución
-municipal, agregación de shock) reside en `app.helpers.aggregation` y
-replica exactamente los criterios ya establecidos en
-`app/pages/4_Spatial_Cluster_Intelligence.py`. No se agrega Opportunity
-Score, no se inventan métricas nuevas.
+aritmética de negocio (comunidad/sector dominante, participación,
+impacto agregado por municipio) pasa por el Decision Support Engine
+(`spatial.decision_support.build_decision_support_report`, cerrado y
+probado en `tests/test_decision_support.py`) vía
+`app.helpers.decision_support_bridge.build_universe` — único punto de
+la capa de aplicación que invoca el motor. Esta página solo adapta esa
+salida a las formas que ya consumían los paneles (disolución municipal,
+renombres de columna) y nunca recalcula peso, comunidad ni sector
+dominante de forma independiente. No se agrega Opportunity Score, no se
+inventan métricas nuevas.
 """
 from __future__ import annotations
 
@@ -36,23 +41,15 @@ if str(_REPO_ROOT) not in sys.path:
 from app.components import map_view, search_sidebar  # noqa: E402
 from app.components.styles import inject_styles  # noqa: E402
 from app.helpers import export_utils  # noqa: E402
-from app.helpers.aggregation import (  # noqa: E402
-    aggregate_shock_by,
-    build_ageb_universe,
-    build_community_summary,
-    build_municipality_gdf,
-    build_municipality_summary,
-)
+from app.helpers.decision_support_bridge import build_universe  # noqa: E402
 from app.helpers.data_sources import (  # noqa: E402
     AGEB_ID_COL,
-    IMPACTO_DIRECTO_COL,
-    IMPACTO_INDIRECTO_COL,
-    IMPACTO_PROPAGADO_COL,
     SECTOR_CLUSTER_JSON,
     WAREHOUSE_PARQUET,
     get_simulation_gdf,
     load_cluster_artifact,
     load_sector_names,
+    load_spatial_matrix,
     load_warehouse_gdf,
 )
 from app.panels import (  # noqa: E402
@@ -112,37 +109,21 @@ if warehouse_gdf is None:
     st.stop()
 
 sector_names = load_sector_names()
+spatial_matrix = load_spatial_matrix()
+sim_gdf = get_simulation_gdf()
+shock_activo = sim_gdf is not None
 
-ageb_gdf, long_cluster_df, long_sector_df, integrity_report = build_ageb_universe(
-    warehouse_gdf, artifact, sector_names
+# Único punto de la capa de aplicación que invoca el Decision Support
+# Engine — construye AGEB/comunidad/municipio de una sola pasada,
+# incluyendo el impacto de simulación si `sim_gdf` está disponible
+# (el motor lo funde en el perfil de cada AGEB, no hace falta un merge
+# manual aquí después).
+ageb_gdf, community_summary, muni_gdf, muni_summary, integrity_report, decision_report = build_universe(
+    warehouse_gdf, artifact, sector_names, spatial_matrix, sim_gdf
 )
 if ageb_gdf.empty:
     st.error("Ningún AGEB del warehouse tiene un sector mapeado a una comunidad.")
     st.stop()
-
-community_summary = build_community_summary(ageb_gdf, artifact)
-muni_gdf, _muni_cluster_weights = build_municipality_gdf(ageb_gdf, long_cluster_df)
-
-sim_gdf = get_simulation_gdf()
-shock_activo = sim_gdf is not None
-
-shock_by_muni, shock_cov_muni = (None, {})
-if shock_activo:
-    shock_by_muni, shock_cov_muni = aggregate_shock_by(
-        sim_gdf, ageb_gdf[[AGEB_ID_COL, "municipio"]], "municipio"
-    )
-muni_summary = build_municipality_summary(muni_gdf, community_summary, shock_by_muni)
-
-# Fusiona el impacto propagado directamente en ageb_gdf (sin recalcular
-# nada — es la misma columna ya producida por Run Simulation) para que
-# la capa "Simulation Impact" del mapa pueda leerla como cualquier otra
-# columna existente.
-if shock_activo:
-    sim_cols = [AGEB_ID_COL, IMPACTO_DIRECTO_COL, IMPACTO_INDIRECTO_COL, IMPACTO_PROPAGADO_COL]
-    ageb_gdf = ageb_gdf.merge(
-        pd.DataFrame(sim_gdf[sim_cols]), on=AGEB_ID_COL, how="left"
-    )
-    ageb_gdf[IMPACTO_PROPAGADO_COL] = ageb_gdf[IMPACTO_PROPAGADO_COL].fillna(0.0)
 
 color_by_cluster = dict(zip(community_summary["cluster_id"], community_summary["color"]))
 nombre_by_cluster = dict(zip(community_summary["cluster_id"], community_summary["nombre"]))
@@ -275,10 +256,14 @@ with st.expander("🔍 Trazabilidad e integridad de datos"):
             f"sectores sin comunidad asignada: {integrity_report['sectores_no_mapeados']}"
         )
     if shock_activo:
+        n_con_impacto = int(ageb_gdf["impacto_directo"].notna().sum()) if "impacto_directo" in ageb_gdf else 0
         st.caption(
-            f"Cobertura shock↔municipio: {shock_cov_muni.get('n_agebs_con_grupo_y_shock', 0)} AGEB · "
-            f"sin municipio: {shock_cov_muni.get('n_agebs_shock_sin_grupo', 0)}."
+            f"Cobertura de simulación: {n_con_impacto} de {len(ageb_gdf)} AGEB(s) del universo actual "
+            f"tienen impacto directo simulado (fusionado por el Decision Support Engine, sin recalcular)."
         )
+    if decision_report.warnings:
+        for w in decision_report.warnings:
+            st.caption(f"⚠ {w}")
     st.caption(
         "Opportunity Explorer no recalcula Warehouse, Spatial Graph, Louvain ni ninguna simulación — "
         "solo lee y presenta artefactos ya cerrados del motor. No se calcula ningún Opportunity Score "

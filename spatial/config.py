@@ -27,9 +27,10 @@ SSD_DIR        = DATA_DIR / "ssd"          # Stage 7 — shock_ageb.parquet
 GRAPH_DIR      = DATA_DIR / "graph"        # Spatial Graph Builder — matriz M (independiente del SEW)
 VISUALIZATION_DIR = DATA_DIR / "visualization"  # Stage 9 — output de visualization/maps.py (PNG/GeoJSON)
 
-for _d in (RAW_DIR, VALIDATED_DIR, NORMALIZED_DIR, INTEGRATED_DIR,
-           WAREHOUSE_DIR, QA_DIR, SSD_DIR, GRAPH_DIR, VISUALIZATION_DIR):
-    _d.mkdir(parents=True, exist_ok=True)
+_PIPELINE_DIRS = (
+    RAW_DIR, VALIDATED_DIR, NORMALIZED_DIR, INTEGRATED_DIR,
+    WAREHOUSE_DIR, QA_DIR, SSD_DIR, GRAPH_DIR, VISUALIZATION_DIR,
+)
 
 # ── Nombres de archivo estándar ─────────────────────────────────────────────
 WAREHOUSE_PARQUET = WAREHOUSE_DIR / "warehouse.parquet"
@@ -62,8 +63,46 @@ CROSSWALK_MASTER_RAW_CSV = CROSSWALK_RAW_DIR / "Crosswalk_Maestro_SCIAN_SERIO_v0
 # de la resolución nombre → código usada por la migración del Crosswalk Maestro.
 SERIO_SECTORES_CSV = BASE_DIR / "serio" / "data" / "sectores.csv"
 
-for _d in (CROSSWALK_DIR, CROSSWALK_RAW_DIR):
-    _d.mkdir(parents=True, exist_ok=True)
+_PIPELINE_DIRS = _PIPELINE_DIRS + (CROSSWALK_DIR, CROSSWALK_RAW_DIR)
+
+
+def ensure_directories(dirs=_PIPELINE_DIRS, *, strict: bool = False) -> list[Path]:
+    """Crea los directorios del pipeline si no existen.
+
+    Antes de este refactor, este módulo ejecutaba `Path.mkdir()` como
+    efecto secundario de `import spatial.config` — funciona bien en
+    desarrollo local, pero Railway/Vercel (destino de la migración de
+    infraestructura, ver roadmap) suelen dar filesystems efímeros o de
+    solo lectura fuera de rutas específicas, y un `import` que revienta
+    por permisos es un error confuso de diagnosticar en producción.
+
+    Se sigue llamando automáticamente al final de este módulo (mismo
+    comportamiento de siempre, cero regresión para el código
+    existente), pero ahora con `strict=False`: si un directorio no se
+    puede crear, se omite con un `logging.warning` en vez de lanzar
+    una excepción que tumbe cualquier `import spatial.config`. Quien
+    despliegue en un entorno con filesystem restringido puede llamar
+    `ensure_directories(strict=True)` explícitamente para fallar rápido
+    en su propio código de arranque, en vez de depender del import.
+
+    Retorna la lista de directorios que sí se pudieron crear/verificar.
+    """
+    import logging
+
+    logger = logging.getLogger(__name__)
+    ok = []
+    for _d in dirs:
+        try:
+            _d.mkdir(parents=True, exist_ok=True)
+            ok.append(_d)
+        except OSError as exc:
+            if strict:
+                raise
+            logger.warning("No se pudo crear el directorio %s: %s", _d, exc)
+    return ok
+
+
+ensure_directories()
 
 # ── Versionamiento del activo de datos (AUTHORING_SCHEMA) ──────────────────
 # Single Source of Truth para las columnas *_version que viajan en cada fila

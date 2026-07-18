@@ -3,7 +3,7 @@
 Opportunity Explorer — utilidades de formato y presentación.
 
 Puramente cosmético: ningún dato económico se calcula aquí. Mismas
-convenciones ya usadas en `app/pages/1_Run Simulation.py` y
+convenciones ya usadas en `app/pages/1_Run_Simulation.py` y
 `app/pages/4_Spatial_Cluster_Intelligence.py` (fix de indentación de
 Markdown vía `textwrap.dedent().strip()`, `_municipio_code` derivado de
 `cvegeo`, formato compacto de magnitudes).

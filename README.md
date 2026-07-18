@@ -1,68 +1,100 @@
-# Lattise Geospatial Engine — SEW (Spatial Economic Warehouse)
+# Lattise Geospatial Engine
 
-Scaffold inicial construido a partir de `SEW_Engine_Scientific_Specification_v3.pdf`
-(Nomenclatura: **SEW** (Warehouse) → **SSD** (Shock Dataset) → **SEE** (Econometric Model)).
+Motor espacial-económico de **Lattise**: distribuye la actividad económica
+nacional (modelo SERIO, 78 sectores, Insumo-Producto regionalizado
+FLQ+RAS) al nivel de AGEB (INEGI, Marco Geoestadístico), propaga shocks
+de demanda con un operador espacial `Y = (I - ρW)⁻¹·S`, y expone todo lo
+anterior a través de una consola operativa en Streamlit ("Lattise Studio").
+
+Nomenclatura del pipeline: **SEW** (Spatial Economic Warehouse) →
+**SSD** (Spatial Shock Distributor) → **SEE** (Spatial Econometric
+Engine). Ver `SEW_Engine_Scientific_Specification_v3.pdf` para el
+diseño científico completo.
 
 ## Estado actual
 
 | Stage | Módulo | Estado |
 |---|---|---|
-| 1. Raw Data | `warehouse/ageb_loader.py::load()` | ✅ Implementado |
-| 2. Validation | `warehouse/ageb_loader.py::validate()` | ✅ Implementado — 6 checks, sin descarte silencioso |
-| 3. Normalization | `warehouse/ageb_loader.py::normalize()` | ✅ Implementado — CRS EPSG:6372, área/perímetro/centroide |
-| 3-4. DENUE + Crosswalk | `warehouse/denue_loader.py`, `warehouse/crosswalk.py` | ⏳ Pendiente (siguiente bloque) |
-| 5. Warehouse | `warehouse/builder.py` | ⏳ Pendiente |
-| 6. QA | `analytics/diagnostics.py` | ⏳ Pendiente |
-| 7. Allocation | `allocation/allocator.py`, `allocation/weights.py` | ⏳ Pendiente |
-| 8. Simulation (SEE) | `allocation/simulation.py` | ⏳ Pendiente — Phase 3, depende de panel DENUE |
-| 9. Visualization | `visualization/maps.py` | ⏳ Pendiente |
-| — | `graph/network.py` (Matriz M) | ⏳ Pendiente |
+| 1–2. Ingesta + Validación AGEB | `warehouse/ageb_loader.py` | ✅ Cerrado |
+| 3. Normalización (CRS, geometría) | `warehouse/ageb_loader.py::normalize()` | ✅ Cerrado |
+| 3–4. DENUE + Crosswalk SCIAN→SERIO | `warehouse/denue_loader.py`, `warehouse/crosswalk.py`, `warehouse/crosswalk_maestro.py` | ✅ Cerrado — autoría jerárquica |
+| 5. Warehouse (Spatial Join, ω) | `warehouse/builder.py` | ✅ Cerrado |
+| 6. QA / Diagnostics | `analytics/diagnostics.py` | ✅ Cerrado |
+| 7. Shock Allocation (SSD) | `allocation/allocator.py`, `allocation/weights.py` | ✅ Cerrado |
+| 8A. Spatial Graph (Matriz M) | `graph/network.py` | ✅ Cerrado |
+| 8B–8D. Simulación (SEE) | `simulation/matrix.py`, `simulation/operator.py`, `simulation/engine.py`, `simulation/scenario.py` | ✅ Cerrado |
+| 9. Visualización | `visualization/maps.py` | ✅ Cerrado |
+| — | Decision Support Engine | ✅ Cerrado — ver `spatial/decision_support/README.md` |
+| 10. API REST | — | ⏳ No presente en este repositorio — confirmar paradero antes de planear la migración de infraestructura |
 
-## Por qué se empezó por `AGEBLoader`
+Todos los stages marcados ✅ tienen tests dedicados con fixtures
+genuinas (nunca mockeadas) en `tests/`. Correr `pytest tests/ -v` para
+el detalle.
 
-Es el único componente cuyo insumo (Marco Geoestadístico INEGI) y método
-de trabajo (ingesta → validación explícita → normalización a EPSG:6372)
-ya existen en `lattise_spatial`. El resto del pipeline (DENUE, crosswalk,
-warehouse builder) depende de que esta pieza esté cerrada primero, porque
-es la que define la geometría base (`g ∈ G`) sobre la que se hace el
-Spatial Join de Stage 4.
+## Arquitectura
 
-## Integración con `lattise_spatial`
+```
+spatial/            Motor — CERRADO. Nunca se modifica desde fuera;
+  warehouse/         solo se consume vía sus APIs públicas.
+  graph/
+  simulation/
+  visualization/
+  analytics/
+  allocation/
+  decision_support/  Capa de perfiles territoriales (AGEB/municipio/
+                      comunidad) que consume el motor de solo lectura.
+serio/               Modelo Insumo-Producto nacional (78 sectores).
+app/                 Lattise Studio — Streamlit. Presentación pura:
+  helpers/            ningún archivo aquí recalcula pesos, comunidades
+  components/         ni impactos — todo eso vive en spatial/.
+  panels/
+  pages/
+tests/               Suite de pytest — un archivo por módulo del motor.
+scripts/             Utilidades offline (crosswalk maestro, clusters
+                      Louvain) que producen artefactos congelados.
+examples/            Scripts de referencia end-to-end.
+```
 
-`ageb_loader.py` intenta importar `lattise_spatial` para reutilizar su
-ingesta multi-formato y su normalización de CRS. Si los nombres de
-función reales de tu paquete difieren de los asumidos
-(`lattise_spatial.io.read_vector`, `lattise_spatial.crs.normalize_crs`,
-`lattise_spatial.export.to_geoparquet`), el loader cae automáticamente a
-un modo nativo con `geopandas` puro — es decir, **funciona hoy sin
-lattise_spatial instalado**, y basta con ajustar el bloque
-`_import_lattise_spatial()` cuando confirmes la firma exacta.
+**Invariante arquitectónico:** `spatial/`, `serio/`, `tests/` y
+`examples/` son módulos cerrados — código nuevo los consume vía sus
+APIs públicas (`to_dict()/to_json()/summary()`), nunca los reescribe.
+`app/` es la única capa que puede cambiar libremente, y su única fuente
+de verdad para peso/comunidad/sector dominante es
+`spatial/decision_support/` (ver ese README para el contrato completo).
 
-## Principio de diseño clave: sin descarte silencioso
+## Principios de diseño
 
-`AGEBLoader.validate()` **nunca elimina filas**. Etiqueta cada geometría
-con 6 columnas booleanas (`chk_geom_not_null`, `chk_geom_not_empty`,
-`chk_geom_is_valid`, `chk_geom_type_ok`, `chk_area_positive`,
-`chk_id_unique`) más una columna resumen `_valid_geometry`, y genera un
-`AGEBValidationReport` auditable. El descarte real ocurre únicamente si
-llamas explícitamente a `filter_valid()` — paso deliberado y separado,
-igual que en `lattise_spatial`.
+- **Sin descarte silencioso.** `validate()` etiqueta con columnas
+  booleanas; el descarte real (`filter_valid()`) es un paso explícito
+  y separado en cada loader.
+- **Islas explícitas.** AGEBs sin vecinos se reportan, nunca se les
+  asigna un fallback artificial. Sectores sin cobertura espacial se
+  reportan, nunca se excluyen en silencio.
+- **Una sola fuente de verdad por magnitud.** Si dos partes del código
+  calculan el mismo peso/dominancia/impacto, es un bug de arquitectura,
+  no una optimización — ver el historial de refactors en
+  `app/helpers/decision_support_bridge.py`.
 
 ## Cómo correrlo
 
 ```bash
 pip install -r requirements.txt
+
+# Suite completa del motor
 python -m pytest tests/ -v
 
-# Sobre un shapefile/gpkg/geojson real de AGEBs:
-python -m spatial.warehouse.ageb_loader ruta/a/ageb_estatal.shp
+# Lattise Studio (Streamlit)
+streamlit run app/home.py
 ```
 
 ## Siguiente bloque de trabajo sugerido
 
-1. `DENUELoader` (Stage 2-3 sobre el DENUE: limpieza de coordenadas, mismo
-   patrón validate/normalize).
-2. `CrosswalkBuilder` (mapeo SCIAN → 78 sectores SERIO, reutilizando
-   `ModeloEconomico.sectores` / `sector_names` de `loader.py`).
-3. `warehouse/builder.py` (Stage 5: Spatial Join vía STRtree, cálculo de ω,
-   serialización de `warehouse.parquet` + `metadata.json`).
+1. Confirmar si el Stage 10 (API REST Flask) existe en otra rama/repo
+   — bloqueante para la migración a Railway + Next.js.
+2. Cerrar la duplicación de agregación restante en
+   `app/pages/4_Spatial_Cluster_Intelligence.py` (mismo patrón ya
+   aplicado a Opportunity Explorer).
+3. Descomponer `app/pages/1_Run Simulation.py` (monolito de ~1,450
+   líneas) en `helpers/components/panels`, siguiendo el patrón de
+   Opportunity Explorer, antes de definir las Fases 4–5 del GIS
+   Workstation.

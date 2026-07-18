@@ -3,7 +3,7 @@
 Opportunity Explorer — hoja de estilos.
 
 Mismos design tokens (paleta, tipografía, radios) que
-`app/pages/1_Run Simulation.py` y `app/pages/4_Spatial_Cluster_Intelligence.py`
+`app/pages/1_Run_Simulation.py` y `app/pages/4_Spatial_Cluster_Intelligence.py`
 para que las tres páginas de Lattise Studio se sientan como una sola
 aplicación GIS profesional (ArcGIS Pro / CARTO / Palantir Foundry).
 """

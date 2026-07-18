@@ -1,0 +1,16 @@
+# Normaliza todos los archivos de texto a LF en el repo, sin importar el
+# sistema operativo donde se haga checkout. Elimina el ruido permanente
+# de "archivos modificados" que eran solo diferencias de terminador de
+# linea (CRLF vs LF), confirmado con `git diff` antes de este cambio.
+* text=auto eol=lf
+
+# Binarios explicitos -- nunca se les debe aplicar conversion de line
+# endings, git los trataria como corruptos si se normalizan por error.
+*.parquet binary
+*.npy binary
+*.npz binary
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.zip binary
+*.gal binary

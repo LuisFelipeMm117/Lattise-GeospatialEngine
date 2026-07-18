@@ -242,7 +242,7 @@ MODULES = [
         "desc": "Ejecuta un shock de demanda final en un AGEB y sector específico "
                 "y observa su propagación espacial sobre el territorio.",
         "tags": ["Shock de demanda", "Propagación espacial", "AGEB"],
-        "page": "pages/1_Run Simulation.py",
+        "page": "pages/1_Run_Simulation.py",
     },
     {
         "index": "02",
@@ -251,7 +251,7 @@ MODULES = [
         "desc": "Consulta y compara los resultados de simulaciones ya ejecutadas, "
                 "con detalle por AGEB y por sector.",
         "tags": ["Detalle por AGEB", "Comparación", "Export"],
-        "page": "pages/2_View Results.py",
+        "page": "pages/2_View_Results.py",
     },
     {
         "index": "03",
@@ -357,7 +357,7 @@ with cta_l:
     st.markdown('<div class="section-sub" style="margin-bottom:0;">Ejecuta tu primera simulación en menos de un minuto, o explora el territorio ya simulado.</div>', unsafe_allow_html=True)
 with cta_r:
     if st.button("Start Simulation →", type="primary", use_container_width=True, key="cta_bottom"):
-        st.switch_page("pages/1_Run Simulation.py")
+        st.switch_page("pages/1_Run_Simulation.py")
     if st.button("Opportunity Explorer →", type="secondary", use_container_width=True, key="cta_explorer"):
         st.switch_page("pages/5_Opportunity_Explorer.py")
 
