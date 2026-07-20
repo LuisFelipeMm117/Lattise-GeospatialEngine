@@ -178,7 +178,7 @@ def render_map(ctx: SimpleNamespace) -> None:
         st.markdown('<div class="empty-state">No hay datos para mostrar en esta capa.</div>', unsafe_allow_html=True)
         return
 
-    centroid = ctx.ageb_gdf_wgs84.geometry.unary_union.centroid
+    centroid = ctx.ageb_gdf_wgs84.geometry.union_all().centroid
     fig = go.Figure(data=traces)
     fig.update_layout(
         mapbox_style="carto-darkmatter", mapbox_zoom=8.2,

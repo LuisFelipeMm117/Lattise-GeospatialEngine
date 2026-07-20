@@ -1333,7 +1333,7 @@ with col_map:
         else:
             st.markdown('<div class="empty-state">No hay datos para mostrar en esta capa.</div>', unsafe_allow_html=True)
     else:
-        centroid = ageb_gdf_wgs84.geometry.unary_union.centroid
+        centroid = ageb_gdf_wgs84.geometry.union_all().centroid
         fig = go.Figure(data=trace_spec.traces)
         fig.update_layout(
             mapbox_style="carto-darkmatter", mapbox_zoom=8.2,

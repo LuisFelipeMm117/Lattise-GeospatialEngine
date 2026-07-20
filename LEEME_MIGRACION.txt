@@ -1,0 +1,49 @@
+CÓMO MIGRAR ESTOS CAMBIOS A TU REPOSITORIO
+===========================================
+
+PASO 1 — Copiar los archivos nuevos/modificados
+------------------------------------------------
+Arrastra TODAS las carpetas y archivos de este zip (.gitattributes,
+.gitignore, README.md, app/, api/, requirements.txt, spatial/, tests/)
+encima de la carpeta de tu repositorio real, dejando que se
+sobrescriban los archivos que ya existían. No borra nada más — solo
+reemplaza/agrega estos 23 archivos exactos.
+
+PASO 2 — Borrar 2 archivos viejos a mano
+------------------------------------------------
+Estos dos ya NO deben existir en tu repo (fueron renombrados, y una
+copia simple no borra el original):
+
+    app/pages/1_Run Simulation.py     <- BORRAR (con espacio en el nombre)
+    app/pages/2_View Results.py       <- BORRAR (con espacio en el nombre)
+
+Sus reemplazos ya los copiaste en el Paso 1:
+    app/pages/1_Run_Simulation.py
+    app/pages/2_View_Results.py
+
+PASO 3 — Borrar 1 archivo de código muerto
+------------------------------------------------
+Este archivo no se usa en ningún lado del proyecto (confirmado) y
+está incluido en la auditoría como código muerto a eliminar:
+
+    spatial/warehouse/crosswalk_old.py     <- BORRAR
+
+PASO 4 — Instalar la dependencia nueva
+------------------------------------------------
+Se agregó Flask (para la API nueva, api/). Corre en tu terminal,
+dentro de la carpeta del repositorio:
+
+    pip install -r requirements.txt
+
+PASO 5 — Verificar que todo sigue funcionando
+------------------------------------------------
+Corre esto en tu terminal, dentro de la carpeta del repositorio:
+
+    python -m pytest tests/ -q
+
+Debe decir "334 passed" al final (puede haber "warnings", eso es
+normal, no es un error). Si en tu máquina el número es distinto a 334,
+probablemente algo no se copió bien — revisa el Paso 1.
+
+NOTA: NO toques nada dentro de tu carpeta data/ — esos son tus
+artefactos reales, no se tocaron en esta corrección.

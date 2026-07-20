@@ -797,7 +797,7 @@ def render_map_block(gdf, sector_label: str):
         gdf_wgs84 = gdf_map
 
     geojson = json.loads(gdf_wgs84.to_json())
-    centroid = gdf_wgs84.geometry.unary_union.centroid
+    centroid = gdf_wgs84.geometry.union_all().centroid
 
     color_kwargs = dict(color=value_col, color_continuous_scale=color_label) if layer_on else dict()
 
@@ -1222,7 +1222,7 @@ def _render_compare_map(gdf, sector_label: str, key_suffix: str):
         gdf_wgs84 = gdf_map
 
     geojson = json.loads(gdf_wgs84.to_json())
-    centroid = gdf_wgs84.geometry.unary_union.centroid
+    centroid = gdf_wgs84.geometry.union_all().centroid
 
     fig = px.choropleth_mapbox(
         gdf_wgs84, geojson=geojson, locations=gdf_wgs84.index,

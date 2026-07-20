@@ -247,7 +247,7 @@ with col_map:
             gdf_wgs84 = gdf_map
 
         geojson = json.loads(gdf_wgs84.to_json())
-        centroid = gdf_wgs84.geometry.unary_union.centroid
+        centroid = gdf_wgs84.geometry.union_all().centroid
 
         fig = px.choropleth_mapbox(
             gdf_wgs84,
