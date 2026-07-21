@@ -109,6 +109,15 @@ class CommunityProfile:
     fl_media: Optional[float] = None
     peso_total: float = 0.0
     participacion_pct: float = 0.0
+    # ── Peso granular — ver spatial/decision_support/aggregation.py::
+    # community_granular_weights(). A diferencia de `peso_total` (que
+    # atribuye el peso COMPLETO de cada AGEB a su comunidad dominante),
+    # `peso_granular` reparte el peso de cada AGEB exactamente donde
+    # corresponde, sumando directo desde AGEB x comunidad. Es el campo
+    # recomendado para cualquier agregado que se presente como "peso
+    # económico de la comunidad" — ver auditoría de Lattise Studio.
+    peso_granular: float = 0.0
+    participacion_pct_granular: float = 0.0
     municipios_principales: list = field(default_factory=list)
     agebs_principales: list = field(default_factory=list)
 

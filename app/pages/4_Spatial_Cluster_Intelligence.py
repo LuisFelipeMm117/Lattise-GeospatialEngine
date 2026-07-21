@@ -47,7 +47,7 @@ from __future__ import annotations
 import json
 import sys
 import textwrap
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Optional
@@ -65,7 +65,6 @@ if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
 
 from spatial.config import AGEB_ID_COL, DATA_DIR, WAREHOUSE_PARQUET  # noqa: E402
-from spatial.warehouse.builder import SECTOR_COL  # noqa: E402 — solo el nombre de columna
 
 try:
     from spatial.simulation.engine import (
@@ -77,6 +76,18 @@ except ImportError:  # pragma: no cover
     IMPACTO_DIRECTO_COL, IMPACTO_INDIRECTO_COL, IMPACTO_PROPAGADO_COL = (
         "shock_directo", "impacto_indirecto", "impacto_propagado",
     )
+
+from app.helpers.cluster_intelligence_bridge import (  # noqa: E402
+    aggregate_shock_by,
+    build_universe,
+    sector_diversity_by_ageb,
+)
+from app.helpers.data_sources import (  # noqa: E402
+    get_simulation_gdf,
+    load_cluster_artifact,
+    load_sector_names,
+    load_warehouse_gdf,
+)
 
 SECTOR_CLUSTER_JSON = DATA_DIR / "analytics" / "sector_cluster.json"
 INFRASTRUCTURE_DIR = DATA_DIR / "analytics" / "infrastructure"
@@ -260,185 +271,11 @@ _LEVEL_COLOR = {"High": "#34D399", "Medium": "#F5B942", "Low": "#576073"}
 
 
 # ══════════════════════════════════════════════════════════
-# CARGA — artefactos congelados, solo lectura
+# CARGA / AGREGACIÓN — ahora vía app.helpers.cluster_intelligence_bridge
+# (spatial.decision_support, motor cerrado) y app.helpers.data_sources.
+# Ver docstring de cluster_intelligence_bridge.py para la decisión de
+# producto sobre peso_granular vs peso_total vs peso solo-dominante.
 # ══════════════════════════════════════════════════════════
-@st.cache_data(show_spinner=False)
-def load_cluster_artifact() -> Optional[dict]:
-    if not SECTOR_CLUSTER_JSON.exists():
-        return None
-    with open(SECTOR_CLUSTER_JSON, encoding="utf-8") as f:
-        return json.load(f)
-
-
-@st.cache_resource(show_spinner="Loading spatial warehouse…")
-def load_warehouse_gdf() -> Optional[gpd.GeoDataFrame]:
-    if not Path(WAREHOUSE_PARQUET).exists():
-        return None
-    return gpd.read_parquet(WAREHOUSE_PARQUET)
-
-
-# ══════════════════════════════════════════════════════════
-# AGREGACIÓN DE PRESENTACIÓN — AGEB × comunidad
-# ══════════════════════════════════════════════════════════
-def _ageb_cluster_weights(warehouse_gdf: gpd.GeoDataFrame, artifact: dict) -> tuple[pd.DataFrame, dict]:
-    """(AGEB, sector) del warehouse + sector_to_cluster del artefacto →
-    (AGEB, cluster_id, peso) en formato largo. peso = empleo_total si el
-    AGEB tiene empleo registrado en algo, si no, n_establecimientos
-    (mismo criterio de respaldo explícito que usa WarehouseBuilder para
-    ω_{g,s}). Sectores sin mapeo en el artefacto se excluyen y reportan,
-    nunca se ocultan."""
-    sector_to_cluster = artifact["sector_to_cluster"]
-    df = pd.DataFrame(warehouse_gdf.drop(columns="geometry"))
-    df[SECTOR_COL] = df[SECTOR_COL].astype(str)
-
-    mapeados_mask = df[SECTOR_COL].isin(sector_to_cluster.keys())
-    n_no_mapeados = int((~mapeados_mask).sum())
-    sectores_no_mapeados = sorted(df.loc[~mapeados_mask, SECTOR_COL].unique().tolist())
-    df = df.loc[mapeados_mask].copy()
-    df["cluster_id"] = df[SECTOR_COL].map(sector_to_cluster).astype(int)
-
-    emp_by_ageb = df.groupby(AGEB_ID_COL)["empleo_total"].sum()
-    usa_empleo = emp_by_ageb[emp_by_ageb > 0].index
-    df["peso"] = np.where(df[AGEB_ID_COL].isin(usa_empleo), df["empleo_total"], df["n_establecimientos"])
-    df["peso_metodo"] = np.where(df[AGEB_ID_COL].isin(usa_empleo), "empleo", "establecimientos")
-
-    long_df = (
-        df.groupby([AGEB_ID_COL, "cluster_id", "peso_metodo"], as_index=False)["peso"].sum()
-    )
-    n_sectores_en_warehouse = int(df[SECTOR_COL].nunique())
-
-    report = {
-        "n_registros_sector_no_mapeado": n_no_mapeados,
-        "sectores_no_mapeados": sectores_no_mapeados,
-        "n_sectores_en_warehouse": n_sectores_en_warehouse,
-    }
-    return long_df, report
-
-
-def build_ageb_community_gdf(
-    warehouse_gdf: gpd.GeoDataFrame, artifact: dict
-) -> tuple[gpd.GeoDataFrame, pd.DataFrame, dict]:
-    """Devuelve (ageb_gdf con comunidad dominante, tabla larga AGEB×cluster
-    con todos los pesos —usada por Municipality y Opportunity—, reporte
-    de integridad)."""
-    long_df, report = _ageb_cluster_weights(warehouse_gdf, artifact)
-
-    idx_dominante = long_df.groupby(AGEB_ID_COL)["peso"].idxmax()
-    dominante = long_df.loc[idx_dominante].reset_index(drop=True)
-    peso_total_ageb = long_df.groupby(AGEB_ID_COL, as_index=False)["peso"].sum().rename(
-        columns={"peso": "peso_total_ageb"}
-    )
-    dominante = dominante.merge(peso_total_ageb, on=AGEB_ID_COL, how="left")
-    dominante["municipio"] = dominante[AGEB_ID_COL].map(_municipio_code)
-
-    geom = warehouse_gdf[[AGEB_ID_COL, "geometry"]].drop_duplicates(subset=[AGEB_ID_COL])
-    gdf_out = geom.merge(dominante, on=AGEB_ID_COL, how="inner")
-    gdf_out = gpd.GeoDataFrame(gdf_out, geometry="geometry", crs=warehouse_gdf.crs)
-
-    report["n_agebs_asignados"] = int(gdf_out[AGEB_ID_COL].nunique())
-    report["n_agebs_sin_asignacion"] = int(geom[AGEB_ID_COL].nunique() - gdf_out[AGEB_ID_COL].nunique())
-    return gdf_out, long_df, report
-
-
-def build_community_summary(ageb_gdf: gpd.GeoDataFrame, artifact: dict) -> pd.DataFrame:
-    clusters_meta = artifact["clusters"]
-    peso_total_global = ageb_gdf["peso"].sum()
-
-    filas = []
-    for cl_key, cl in clusters_meta.items():
-        sub = ageb_gdf[ageb_gdf["cluster_id"] == int(cl_key)]
-        peso_econ = float(sub["peso"].sum())
-        filas.append({
-            "cluster_id": int(cl_key),
-            "nombre": cl["nombre"],
-            "sectores": cl["sectores"],
-            "n_sectores": cl["n_sectores"],
-            "centralidad_media": cl["centralidad_media"],
-            "bl_media": cl["bl_media"],
-            "fl_media": cl["fl_media"],
-            "n_agebs": int(sub[AGEB_ID_COL].nunique()),
-            "municipios": sorted(sub["municipio"].unique().tolist()),
-            "n_municipios": int(sub["municipio"].nunique()),
-            "peso_economico": peso_econ,
-            "participacion_pct": (peso_econ / peso_total_global * 100) if peso_total_global else 0.0,
-        })
-    df = pd.DataFrame(filas).sort_values("peso_economico", ascending=False).reset_index(drop=True)
-    df["color"] = [_PALETTE[i % len(_PALETTE)] for i in range(len(df))]
-    return df
-
-
-def get_simulation_gdf() -> Optional[gpd.GeoDataFrame]:
-    if "simulation_gdf" not in st.session_state or "simulation_report" not in st.session_state:
-        return None
-    sim_gdf = st.session_state["simulation_gdf"]
-    cols = [AGEB_ID_COL, IMPACTO_DIRECTO_COL, IMPACTO_INDIRECTO_COL, IMPACTO_PROPAGADO_COL]
-    if any(c not in sim_gdf.columns for c in cols):
-        return None
-    return sim_gdf
-
-
-def aggregate_shock_by(sim_gdf: gpd.GeoDataFrame, id_map: pd.DataFrame, group_col: str) -> tuple[pd.DataFrame, dict]:
-    """Une simulation_gdf (Stage 8C, ya calculado) con un mapeo AGEB→grupo
-    (cluster_id o municipio) y agrega sum() por grupo. Nunca recalcula
-    shock ni propagación — solo groupby/sum sobre columnas existentes."""
-    cols = [AGEB_ID_COL, IMPACTO_DIRECTO_COL, IMPACTO_INDIRECTO_COL, IMPACTO_PROPAGADO_COL]
-    sim_df = pd.DataFrame(sim_gdf[cols])
-    merged = id_map.merge(sim_df, on=AGEB_ID_COL, how="inner")
-
-    coverage = {
-        "n_agebs_simulados": int(sim_df[AGEB_ID_COL].nunique()),
-        "n_agebs_con_grupo_y_shock": int(merged[AGEB_ID_COL].nunique()),
-        "n_agebs_shock_sin_grupo": int(sim_df[AGEB_ID_COL].nunique() - merged[AGEB_ID_COL].nunique()),
-    }
-    grouped = merged.groupby(group_col, as_index=False)[
-        [IMPACTO_DIRECTO_COL, IMPACTO_INDIRECTO_COL, IMPACTO_PROPAGADO_COL]
-    ].sum()
-    return grouped, coverage
-
-
-# ══════════════════════════════════════════════════════════
-# AGREGACIÓN — Municipality Layer (disolución geométrica)
-# ══════════════════════════════════════════════════════════
-@st.cache_data(show_spinner=False)
-def build_municipality_gdf(_ageb_gdf: gpd.GeoDataFrame, _long_df: pd.DataFrame) -> tuple[gpd.GeoDataFrame, pd.DataFrame]:
-    """Disuelve geometría AGEB→municipio (agregación geométrica pura, no
-    económica) y calcula el cluster dominante por municipio con el mismo
-    criterio de argmax(peso) ya usado a nivel AGEB."""
-    ageb_gdf = _ageb_gdf
-    long_df = _long_df.merge(
-        ageb_gdf[[AGEB_ID_COL, "municipio"]].drop_duplicates(), on=AGEB_ID_COL, how="inner"
-    )
-    muni_cluster = long_df.groupby(["municipio", "cluster_id"], as_index=False)["peso"].sum()
-    idx_dom = muni_cluster.groupby("municipio")["peso"].idxmax()
-    muni_dominant = muni_cluster.loc[idx_dom].reset_index(drop=True).rename(
-        columns={"cluster_id": "cluster_dominante", "peso": "peso_cluster_dominante"}
-    )
-
-    dissolved = ageb_gdf.dissolve(by="municipio", aggfunc={"peso": "sum"}).reset_index()
-    n_agebs = ageb_gdf.groupby("municipio")[AGEB_ID_COL].nunique().rename("n_agebs")
-    dissolved = dissolved.merge(n_agebs, on="municipio", how="left")
-    dissolved = dissolved.merge(muni_dominant, on="municipio", how="left")
-
-    peso_total = dissolved["peso"].sum()
-    dissolved["participacion_pct"] = (dissolved["peso"] / peso_total * 100) if peso_total else 0.0
-    return dissolved, muni_cluster
-
-
-def build_municipality_summary(
-    muni_gdf: gpd.GeoDataFrame, community_summary: pd.DataFrame, muni_shock: Optional[pd.DataFrame]
-) -> pd.DataFrame:
-    color_by_cluster = dict(zip(community_summary["cluster_id"], community_summary["color"]))
-    nombre_by_cluster = dict(zip(community_summary["cluster_id"], community_summary["nombre"]))
-
-    df = pd.DataFrame(muni_gdf.drop(columns="geometry")).copy()
-    df["cluster_dominante_nombre"] = df["cluster_dominante"].map(nombre_by_cluster)
-    df["color"] = df["cluster_dominante"].map(color_by_cluster).fillna("#576073")
-
-    if muni_shock is not None and not muni_shock.empty:
-        df = df.merge(muni_shock, on="municipio", how="left")
-        for c in (IMPACTO_DIRECTO_COL, IMPACTO_INDIRECTO_COL, IMPACTO_PROPAGADO_COL):
-            df[c] = df[c].fillna(0.0)
-    return df.sort_values("peso", ascending=False).reset_index(drop=True)
 
 
 # ══════════════════════════════════════════════════════════
@@ -1145,33 +982,26 @@ if warehouse_gdf is None:
     """)
     st.stop()
 
-ageb_gdf, long_df, integrity_report = build_ageb_community_gdf(warehouse_gdf, artifact)
-if ageb_gdf.empty:
-    st.error("Ningún AGEB del warehouse tiene un sector mapeado a una comunidad.")
-    st.stop()
-_compute_sector_diversity(
-    pd.DataFrame(warehouse_gdf.drop(columns="geometry")).assign(
-        **{SECTOR_COL: pd.DataFrame(warehouse_gdf.drop(columns="geometry"))[SECTOR_COL].astype(str)}
-    ).groupby(AGEB_ID_COL)[SECTOR_COL].nunique().rename("n_sectores_ageb").reset_index()
-)
-
-community_summary = build_community_summary(ageb_gdf, artifact)
+sector_names = load_sector_names()
 sim_gdf = get_simulation_gdf()
 shock_activo = sim_gdf is not None
 
-shock_by_cluster, shock_cov_cluster = (None, {})
-if shock_activo:
-    shock_by_cluster, shock_cov_cluster = aggregate_shock_by(
-        sim_gdf, ageb_gdf[[AGEB_ID_COL, "cluster_id"]], "cluster_id"
-    )
+# Único punto de esta página que invoca el Decision Support Engine —
+# construye AGEB/comunidad/municipio de una sola pasada, incluyendo
+# impacto de simulación si `sim_gdf` está disponible. Ver docstring de
+# app.helpers.cluster_intelligence_bridge para la decisión de producto
+# sobre peso_granular (peso económico de comunidad).
+ageb_gdf, long_df, long_source_df, community_summary, muni_gdf, muni_summary, integrity_report, decision_report = (
+    build_universe(warehouse_gdf, artifact, sector_names, None, sim_gdf)
+)
+if ageb_gdf.empty:
+    st.error("Ningún AGEB del warehouse tiene un sector mapeado a una comunidad.")
+    st.stop()
+_compute_sector_diversity(sector_diversity_by_ageb(warehouse_gdf))
 
-muni_gdf, muni_cluster_weights = build_municipality_gdf(ageb_gdf, long_df)
-shock_by_muni, shock_cov_muni = (None, {})
+shock_by_cluster = None
 if shock_activo:
-    shock_by_muni, shock_cov_muni = aggregate_shock_by(
-        sim_gdf, ageb_gdf[[AGEB_ID_COL, "municipio"]], "municipio"
-    )
-muni_summary = build_municipality_summary(muni_gdf, community_summary, shock_by_muni)
+    shock_by_cluster = aggregate_shock_by(sim_gdf, ageb_gdf[[AGEB_ID_COL, "cluster_id"]], "cluster_id")
 
 if "opportunity_weights" not in st.session_state:
     st.session_state["opportunity_weights"] = dict(DEFAULT_OPPORTUNITY_WEIGHTS)
@@ -1459,24 +1289,23 @@ if active_layer_id == "opportunity":
 # ══════════════════════════════════════════════════════════
 with st.expander("🔍 Trazabilidad e integridad de datos"):
     st.markdown(f"""
-    - Artefacto de comunidades: `{SECTOR_CLUSTER_JSON.relative_to(_REPO_ROOT)}` generado {artifact['generated_at']}
+    - Artefacto de comunidades generado {artifact['generated_at']}
       · {artifact['n_clusters']} comunidades · modularidad Q={artifact['modularity']}
     - AGEBs asignados a una comunidad: **{integrity_report['n_agebs_asignados']}**
       · sin asignación: **{integrity_report['n_agebs_sin_asignacion']}**
     - Municipios detectados: **{muni_summary['municipio'].nunique()}**
+    - Peso económico de comunidad: definición granular (reparte el peso de
+      cada AGEB exactamente donde corresponde entre las comunidades a las
+      que pertenece — nunca lo pierde ni lo regala entero a una sola).
     """)
     if integrity_report["sectores_no_mapeados"]:
         st.warning(
             f"{integrity_report['n_registros_sector_no_mapeado']} registros del warehouse pertenecen a "
             f"sectores sin comunidad asignada: {integrity_report['sectores_no_mapeados']}"
         )
-    if shock_activo:
-        st.caption(
-            f"Cobertura shock↔comunidad: {shock_cov_cluster.get('n_agebs_con_grupo_y_shock', 0)} AGEB · "
-            f"sin comunidad: {shock_cov_cluster.get('n_agebs_shock_sin_grupo', 0)}. "
-            f"Cobertura shock↔municipio: {shock_cov_muni.get('n_agebs_con_grupo_y_shock', 0)} AGEB · "
-            f"sin municipio: {shock_cov_muni.get('n_agebs_shock_sin_grupo', 0)}."
-        )
+    if decision_report.warnings:
+        for w in decision_report.warnings:
+            st.caption(f"⚠ {w}")
     st.caption(
         "Opportunity Score: índice compuesto normalizado (min-max) sobre peso económico/impacto, "
         "participación, centralidad Louvain, diversidad/especialización de la mezcla de comunidades "

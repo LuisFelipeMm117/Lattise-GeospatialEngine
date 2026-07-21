@@ -208,9 +208,41 @@ def build_ageb_universe(
     return ageb_gdf, long_cluster, long_sector, report
 
 
+def community_granular_weights(
+    long_cluster: pd.DataFrame, cluster_id_col: str = CLUSTER_ID_COL, peso_col: str = PESO_COL
+) -> pd.DataFrame:
+    """Peso económico real de cada comunidad — suma DIRECTA de
+    `long_cluster` (AGEB x comunidad, salida de `ageb_cluster_weights`)
+    agrupada por `cluster_id`, SIN pasar por la comunidad dominante de
+    cada AGEB.
+
+    Por qué existe junto a `CommunityProfile.peso_total` (que sí
+    atribuye el peso completo de cada AGEB a su comunidad dominante):
+    un AGEB con 60% de su peso en sectores de la Comunidad 5 y 40% en
+    sectores de la Comunidad 2 aporta 60/40 aquí, no 100/0. La suma de
+    `peso_granular` sobre todas las comunidades reproduce exactamente
+    el peso total del territorio (`long_cluster[peso_col].sum()`) sin
+    perder ni regalar peso entre comunidades — a diferencia de sumar
+    solo la porción dominante por AGEB (que sí pierde peso: descarta
+    todo lo no-dominante), o de atribuir el peso completo del AGEB a
+    su dominante (que sí regala peso ajeno a la comunidad dominante).
+    Decisión de producto: ver auditoría de Lattise Studio, hallazgo
+    sobre discrepancia de "peso económico de comunidad" entre
+    `4_Spatial_Cluster_Intelligence.py` y este módulo.
+    """
+    if long_cluster.empty:
+        return pd.DataFrame(columns=[cluster_id_col, "peso_granular"])
+    return (
+        long_cluster.groupby(cluster_id_col, as_index=False)[peso_col]
+        .sum()
+        .rename(columns={peso_col: "peso_granular"})
+    )
+
+
 __all__ = [
     "AggregationReport",
     "ageb_sector_weights",
     "ageb_cluster_weights",
     "build_ageb_universe",
+    "community_granular_weights",
 ]

@@ -68,7 +68,7 @@ from typing import Any, Mapping, Optional
 import geopandas as gpd
 import pandas as pd
 
-from spatial.decision_support.aggregation import build_ageb_universe
+from spatial.decision_support.aggregation import build_ageb_universe, community_granular_weights
 from spatial.decision_support.constants import (
     CLUSTER_ID_COL,
     ES_ISLA_COL,
@@ -290,6 +290,7 @@ def _build_municipality_profiles(
 
 def _build_community_profiles(
     ageb_profiles: dict[str, AGEBProfile],
+    long_cluster: pd.DataFrame,
     cluster_artifact: dict,
     sector_names: dict,
     top_n: int,
@@ -303,12 +304,17 @@ def _build_community_profiles(
     )
     peso_total_global = df["peso_total"].sum() if not df.empty else 0.0
 
+    granular = community_granular_weights(long_cluster)
+    granular_by_cluster = dict(zip(granular[CLUSTER_ID_COL], granular["peso_granular"]))
+    peso_granular_global = float(granular["peso_granular"].sum()) if not granular.empty else 0.0
+
     out: dict[str, CommunityProfile] = {}
     for cl_key, cl in clusters_meta.items():
         cluster_id = int(cl["cluster_id"])
         sub = df[df["cluster_id"] == cluster_id] if not df.empty else df
         sub_sorted = sub.sort_values("peso_total", ascending=False) if not sub.empty else sub
         peso_comunidad = float(sub["peso_total"].sum()) if not sub.empty else 0.0
+        peso_comunidad_granular = float(granular_by_cluster.get(cluster_id, 0.0))
 
         municipios_principales = (
             sub.groupby("municipio")["peso_total"].sum().sort_values(ascending=False).head(top_n).index.tolist()
@@ -328,6 +334,10 @@ def _build_community_profiles(
             fl_media=cl.get("fl_media"),
             peso_total=peso_comunidad,
             participacion_pct=(peso_comunidad / peso_total_global * 100) if peso_total_global else 0.0,
+            peso_granular=peso_comunidad_granular,
+            participacion_pct_granular=(
+                peso_comunidad_granular / peso_granular_global * 100
+            ) if peso_granular_global else 0.0,
             municipios_principales=municipios_principales,
             agebs_principales=sub_sorted["ageb"].head(top_n).tolist() if not sub.empty else [],
         )
@@ -384,7 +394,9 @@ def build_decision_support_report(
         ageb_gdf, long_sector, relationships, cluster_artifact, simulation_gdf, spatial_matrix, id_col, sector_col
     )
     municipality_profiles = _build_municipality_profiles(ageb_profiles, top_n_principales)
-    community_profiles = _build_community_profiles(ageb_profiles, cluster_artifact, sector_names, top_n_principales)
+    community_profiles = _build_community_profiles(
+        ageb_profiles, long_cluster, cluster_artifact, sector_names, top_n_principales
+    )
 
     insights = {
         "portfolio": portfolio_insights(list(community_profiles.values())),

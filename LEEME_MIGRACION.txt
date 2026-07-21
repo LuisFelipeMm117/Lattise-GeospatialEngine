@@ -1,49 +1,44 @@
-CÓMO MIGRAR ESTOS CAMBIOS A TU REPOSITORIO
-===========================================
+CÓMO MIGRAR ESTOS CAMBIOS A TU REPOSITORIO — RONDA 3
+======================================================
+(H7: API REST · H10: tests de humo · H8: cierre de la 3ra duplicación
+de agregación + decisión de peso granular)
 
 PASO 1 — Copiar los archivos nuevos/modificados
 ------------------------------------------------
-Arrastra TODAS las carpetas y archivos de este zip (.gitattributes,
-.gitignore, README.md, app/, api/, requirements.txt, spatial/, tests/)
-encima de la carpeta de tu repositorio real, dejando que se
-sobrescriban los archivos que ya existían. No borra nada más — solo
-reemplaza/agrega estos 23 archivos exactos.
+Arrastra TODO el contenido de este zip (.gitattributes, .gitignore,
+README.md, api/, app/, requirements.txt, spatial/, tests/) encima de
+la carpeta de tu repositorio real, dejando que se sobrescriban los
+archivos que ya existían.
 
-PASO 2 — Borrar 2 archivos viejos a mano
+Si NO habías migrado la ronda anterior (API/tests/smoke tests) por
+separado, este zip ya la incluye completa — no hace falta que apliques
+las dos rondas por separado, esta contiene todo.
+
+PASO 2 — Instalar Flask (si no lo hiciste en la ronda anterior)
 ------------------------------------------------
-Estos dos ya NO deben existir en tu repo (fueron renombrados, y una
-copia simple no borra el original):
-
-    app/pages/1_Run Simulation.py     <- BORRAR (con espacio en el nombre)
-    app/pages/2_View Results.py       <- BORRAR (con espacio en el nombre)
-
-Sus reemplazos ya los copiaste en el Paso 1:
-    app/pages/1_Run_Simulation.py
-    app/pages/2_View_Results.py
-
-PASO 3 — Borrar 1 archivo de código muerto
-------------------------------------------------
-Este archivo no se usa en ningún lado del proyecto (confirmado) y
-está incluido en la auditoría como código muerto a eliminar:
-
-    spatial/warehouse/crosswalk_old.py     <- BORRAR
-
-PASO 4 — Instalar la dependencia nueva
-------------------------------------------------
-Se agregó Flask (para la API nueva, api/). Corre en tu terminal,
-dentro de la carpeta del repositorio:
-
     pip install -r requirements.txt
 
-PASO 5 — Verificar que todo sigue funcionando
+PASO 3 — Verificar que todo sigue funcionando
 ------------------------------------------------
-Corre esto en tu terminal, dentro de la carpeta del repositorio:
-
     python -m pytest tests/ -q
 
-Debe decir "334 passed" al final (puede haber "warnings", eso es
-normal, no es un error). Si en tu máquina el número es distinto a 334,
-probablemente algo no se copió bien — revisa el Paso 1.
+Debe decir "348 passed" al final.
+
+PASO 4 — Qué cambió de verdad en esta ronda (para tu conocimiento)
+------------------------------------------------
+- Se agregó un campo NUEVO en el motor (spatial/decision_support/):
+  `CommunityProfile.peso_granular` / `participacion_pct_granular`.
+  El campo existente `peso_total` NO se tocó — sigue calculando
+  exactamente lo mismo que antes.
+- `app/pages/4_Spatial_Cluster_Intelligence.py` (Cluster Intelligence)
+  ahora usa ese campo nuevo para mostrar "peso económico de comunidad"
+  en vez de su cálculo local anterior. Esto SÍ cambia los números que
+  se muestran en esa página (ver la auditoría para el detalle:
+  "peso económico" ahora es ~2.86x mayor en total y se redistribuye
+  distinto entre comunidades — es la corrección de un error real, no
+  un cambio cosmético).
+- Se agregó `api/` — un servidor REST nuevo (Flask). No se activa solo;
+  para correrlo hay que ejecutar `python -m api.app` a propósito.
 
 NOTA: NO toques nada dentro de tu carpeta data/ — esos son tus
 artefactos reales, no se tocaron en esta corrección.
