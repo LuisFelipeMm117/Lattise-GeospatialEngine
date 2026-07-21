@@ -92,3 +92,29 @@ def test_switch_page_references_point_to_existing_files():
             if not referenced.exists():
                 offenders.append(f"{py_file.relative_to(_REPO_ROOT)} -> {match.group(1)}")
     assert not offenders, f"st.switch_page() apuntando a archivos inexistentes: {offenders}"
+
+
+def test_run_simulation_full_flow_after_decomposition():
+    """Regresión específica de H9: `1_Run_Simulation.py` se descompuso
+    de 1,451 líneas en 7 módulos (`simulation_styles`,
+    `simulation_toolbar`, `simulation_map`, `simulation_formatting`,
+    `scenario_manager`, `simulation_result`, `simulation_comparison`).
+    Un test de "la página carga sin excepción" (ver
+    `test_page_loads_without_exception` arriba) no habría atrapado un
+    error de wiring entre módulos que solo aparece al presionar
+    Launch — este test ejercita esa ruta completa: toolbar -> Launch ->
+    modelo.simular() -> run_simulation_engine() -> scenario_manager ->
+    render_result (mapa + KPIs + insights + ranking + export)."""
+    at = AppTest.from_file(str(_REPO_ROOT / "app/pages/1_Run_Simulation.py"), default_timeout=90)
+    at.run()
+    assert not at.exception, f"Carga inicial falló: {at.exception}"
+
+    launch_buttons = [b for b in at.button if b.label == "▶ Launch"]
+    assert launch_buttons, "No se encontró el botón Launch en el toolbar."
+    launch_buttons[0].click()
+    at.run()
+    assert not at.exception, f"Ejecutar una simulación falló tras la descomposición: {at.exception}"
+
+    # El resultado debe haberse renderizado (KPIs/insights/ranking) — no
+    # solo "no truena", sino que produce contenido real.
+    assert len(at.markdown) > 10, "render_result no parece haber producido contenido."

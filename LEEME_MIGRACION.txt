@@ -1,44 +1,58 @@
-CÓMO MIGRAR ESTOS CAMBIOS A TU REPOSITORIO — RONDA 3
+CÓMO MIGRAR ESTOS CAMBIOS A TU REPOSITORIO — RONDA 4
 ======================================================
-(H7: API REST · H10: tests de humo · H8: cierre de la 3ra duplicación
-de agregación + decisión de peso granular)
+(H9: descomposición de 1_Run_Simulation.py, de 1,451 a 163 líneas,
+en 7 módulos nuevos)
 
-PASO 1 — Copiar los archivos nuevos/modificados
+Este zip contiene TODO lo de las 4 rondas juntas — no hace falta que
+hayas aplicado las rondas anteriores primero, aunque si ya lo hiciste
+no pasa nada, se sobrescribe igual.
+
+PASO 1 — Copiar los archivos
 ------------------------------------------------
-Arrastra TODO el contenido de este zip (.gitattributes, .gitignore,
-README.md, api/, app/, requirements.txt, spatial/, tests/) encima de
-la carpeta de tu repositorio real, dejando que se sobrescriban los
-archivos que ya existían.
+Arrastra TODO el contenido de este zip encima de la carpeta de tu
+repositorio real, dejando que sobrescriba lo que ya existe. Esto
+incluye 5 archivos completamente NUEVOS que antes no existían:
 
-Si NO habías migrado la ronda anterior (API/tests/smoke tests) por
-separado, este zip ya la incluye completa — no hace falta que apliques
-las dos rondas por separado, esta contiene todo.
+    app/components/simulation_map.py
+    app/components/simulation_styles.py
+    app/components/simulation_toolbar.py
+    app/helpers/scenario_manager.py
+    app/helpers/simulation_formatting.py
+    app/panels/simulation_comparison.py
+    app/panels/simulation_result.py
 
-PASO 2 — Instalar Flask (si no lo hiciste en la ronda anterior)
+Y reemplaza `app/pages/1_Run_Simulation.py` por una versión mucho más
+corta (163 líneas) que ahora solo orquesta esos módulos nuevos.
+
+PASO 2 — Verificar que quedaron los archivos con espacio borrados
 ------------------------------------------------
-    pip install -r requirements.txt
+Si por algún motivo todavía tienes estos dos archivos (de rondas
+anteriores), bórralos ahora:
+
+    app/pages/1_Run Simulation.py     <- BORRAR si existe
+    app/pages/2_View Results.py       <- BORRAR si existe
+
+Y este también, si sigue ahí:
+
+    spatial/warehouse/crosswalk_old.py   <- BORRAR si existe
 
 PASO 3 — Verificar que todo sigue funcionando
 ------------------------------------------------
+    pip install -r requirements.txt
     python -m pytest tests/ -q
 
-Debe decir "348 passed" al final.
+Debe decir "349 passed" al final.
 
-PASO 4 — Qué cambió de verdad en esta ronda (para tu conocimiento)
+PASO 4 — Qué cambió de verdad en esta ronda
 ------------------------------------------------
-- Se agregó un campo NUEVO en el motor (spatial/decision_support/):
-  `CommunityProfile.peso_granular` / `participacion_pct_granular`.
-  El campo existente `peso_total` NO se tocó — sigue calculando
-  exactamente lo mismo que antes.
-- `app/pages/4_Spatial_Cluster_Intelligence.py` (Cluster Intelligence)
-  ahora usa ese campo nuevo para mostrar "peso económico de comunidad"
-  en vez de su cálculo local anterior. Esto SÍ cambia los números que
-  se muestran en esa página (ver la auditoría para el detalle:
-  "peso económico" ahora es ~2.86x mayor en total y se redistribuye
-  distinto entre comunidades — es la corrección de un error real, no
-  un cambio cosmético).
-- Se agregó `api/` — un servidor REST nuevo (Flask). No se activa solo;
-  para correrlo hay que ejecutar `python -m api.app` a propósito.
+Ningún comportamiento visible cambió — la página se ve y funciona
+exactamente igual. Lo que cambió es solo la organización del código:
+un archivo de 1,451 líneas se volvió 7 archivos más chicos y fáciles
+de entender, cada uno con una sola responsabilidad (estilos, toolbar,
+mapa, formato, historial de escenarios, resultado, comparación). Se
+verificó con una prueba automatizada que hace clic real en "Launch" y
+corre una simulación completa de punta a punta, no solo que la página
+cargue.
 
 NOTA: NO toques nada dentro de tu carpeta data/ — esos son tus
 artefactos reales, no se tocaron en esta corrección.
