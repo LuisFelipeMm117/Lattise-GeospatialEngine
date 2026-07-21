@@ -213,6 +213,120 @@ class ModeloEconomico:
             "sector_base_pesos":     float(X[sector_idx] / MXN_A_MMDP),
         }
 
+    # ── Simulación compuesta multi-sector (Fase 4, GIS Workstation) ────────────
+    def simular_multiple(
+        self,
+        estado_key: str,
+        shocks: dict[int, float],
+    ) -> dict:
+        """
+        Simula un ESCENARIO COMPUESTO: varios sectores golpeados a la vez
+        en el mismo estado (p.ej. un paquete de inversión que reparte
+        $500M entre Construcción y Manufactura).
+
+        No es un algoritmo nuevo — es exactamente `ΔX = L·ΔY` de
+        `simular()`, generalizado de un vector ΔY con una sola entrada
+        no-cero a un vector ΔY con varias. El operador de Leontief es
+        lineal, así que esto es matemáticamente idéntico a sumar el
+        resultado de `simular()` para cada sector por separado
+        (superposición) — se hace en una sola pasada por eficiencia,
+        no por una razón matemática distinta.
+
+        Parámetros:
+          estado_key : clave interna del estado
+          shocks     : {sector_idx: monto_pesos} — un shock por sector,
+                       positivo = expansión, negativo = contracción.
+                       Mínimo 1 entrada (equivalente a `simular()`),
+                       sin límite superior de sectores.
+
+        Retorna el MISMO shape que `simular()` (delta_X, delta_VA,
+        delta_E, mult_produccion, mult_ingreso, mult_empleo, df_detalle),
+        más `shocks_detalle`: lista de los sectores que componen el
+        escenario, para que la UI pueda mostrar "qué se definió" sin
+        recalcular nada.
+        """
+        if not shocks:
+            raise ValueError("simular_multiple() requiere al menos un sector con shock.")
+        for sector_idx in shocks:
+            if not (0 <= sector_idx < self.n):
+                raise ValueError(f"Sector {sector_idx} fuera de rango [0, {self.n-1}]")
+
+        d = self._load_estado(estado_key)
+        L, e, X = d["L"], d["e"], d["X"]
+        v = d["v"]
+
+        # Vector de shock compuesto — misma construcción que simular(),
+        # con N entradas no-cero en vez de 1.
+        delta_Y = np.zeros(self.n)
+        for sector_idx, monto_pesos in shocks.items():
+            delta_Y[sector_idx] += monto_pesos * MXN_A_MMDP
+        monto_mmdp_total = float(delta_Y.sum())
+        monto_pesos_total = float(sum(shocks.values()))
+
+        # ── Impactos — misma fórmula exacta que simular() ──────────────────
+        delta_X  = L @ delta_Y
+        delta_VA = v * delta_X
+        delta_E  = e * delta_X
+
+        # ── Multiplicadores del paquete completo ────────────────────────────
+        mult_prod    = delta_X.sum()  / monto_mmdp_total if monto_mmdp_total != 0 else 0
+        mult_ingreso = delta_VA.sum() / monto_mmdp_total if monto_mmdp_total != 0 else 0
+        mult_empleo  = delta_E.sum()  / monto_mmdp_total if monto_mmdp_total != 0 else 0
+
+        # ── DataFrame detalle — igual que simular() ─────────────────────────
+        df = pd.DataFrame({
+            "indice":    np.arange(self.n),
+            "scian":     self.sectores,
+            "nombre":    [self.sector_names[s] for s in self.sectores],
+            "base_mmdp": X,
+            "base_pesos": X / MXN_A_MMDP,
+            "activo":    d["VA_r"] > 0,
+            "delta_X_mmdp":   delta_X,
+            "delta_X_pesos":  delta_X / MXN_A_MMDP,
+            "delta_VA_mmdp":  delta_VA,
+            "delta_VA_pesos": delta_VA / MXN_A_MMDP,
+            "delta_E":        delta_E,
+            "v_j":       v,
+            "e_j":       e,
+            "es_origen_shock": [i in shocks for i in range(self.n)],
+        })
+        df["variacion_pct"] = np.where(
+            df["base_mmdp"] > 1e-6, df["delta_X_mmdp"] / df["base_mmdp"] * 100, np.nan,
+        )
+        total_delta_X = delta_X.sum()
+        df["share_produccion"] = np.where(
+            total_delta_X != 0, df["delta_X_mmdp"] / total_delta_X, 0.0,
+        )
+        df["_abs_delta_X"] = df["delta_X_pesos"].abs()
+        df = df.sort_values("_abs_delta_X", ascending=False).drop(columns=["_abs_delta_X"]).reset_index(drop=True)
+
+        shocks_detalle = [
+            {
+                "sector_idx":  sector_idx,
+                "scian":       self.sectores[sector_idx],
+                "nombre":      self.sector_names[self.sectores[sector_idx]],
+                "monto_pesos": float(monto_pesos),
+                "base_pesos":  float(X[sector_idx] / MXN_A_MMDP),
+            }
+            for sector_idx, monto_pesos in shocks.items()
+        ]
+
+        return {
+            "delta_X":       delta_X,
+            "delta_VA":      delta_VA,
+            "delta_E":       delta_E,
+            "delta_X_total_pesos":   float(delta_X.sum() / MXN_A_MMDP),
+            "delta_VA_total_pesos":  float(delta_VA.sum() / MXN_A_MMDP),
+            "delta_E_total":         float(delta_E.sum()),
+            "monto_mmdp":            monto_mmdp_total,
+            "monto_pesos":           monto_pesos_total,
+            "mult_produccion":       float(mult_prod),
+            "mult_ingreso":          float(mult_ingreso),
+            "mult_empleo":           float(mult_empleo),
+            "df_detalle":            df,
+            "shocks_detalle":        shocks_detalle,
+        }
+
     # ── Comparación entre estados ─────────────────────────────────────────────
     def comparar_estados(
         self,

@@ -102,7 +102,7 @@ st.markdown('<hr class="thin">', unsafe_allow_html=True)
 toolbar = render_toolbar(modelo)
 estado_nombre = toolbar["estado_nombre"]
 estado_key = toolbar["estado_key"]
-sector_idx = toolbar["sector_idx"]
+shocks = toolbar["shocks"]
 sector_name = toolbar["sector_name"]
 monto_pesos = toolbar["monto_pesos"]
 rho = toolbar["rho"]
@@ -119,7 +119,10 @@ if launch:
     st.session_state["selected_ageb_id"] = None
     with st.spinner("Running simulation…"):
         try:
-            resultado_simulacion = modelo.simular(estado_key, sector_idx, monto_pesos)
+            # simular_multiple() generaliza simular() a N sectores; con 1
+            # solo sector da un resultado idéntico (ver
+            # tests/test_simular_multiple.py::test_single_sector_matches_simular_exactly).
+            resultado_simulacion = modelo.simular_multiple(estado_key, shocks)
             gdf_final, report = run_simulation_engine(resultado_simulacion, rho)
         except Exception as e:
             st.error(f"Simulation failed: {e}")
@@ -128,7 +131,8 @@ if launch:
                 "estado": estado_nombre,
                 "estado_key": estado_key,
                 "sector": sector_name,
-                "sector_idx": sector_idx,
+                "shocks": shocks,
+                "shocks_detalle": resultado_simulacion.get("shocks_detalle", []),
                 "monto_pesos": monto_pesos,
                 "rho": rho,
             }

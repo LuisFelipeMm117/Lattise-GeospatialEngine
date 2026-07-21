@@ -1,58 +1,40 @@
-CÓMO MIGRAR ESTOS CAMBIOS A TU REPOSITORIO — RONDA 4
+CÓMO MIGRAR ESTOS CAMBIOS A TU REPOSITORIO — RONDA 5
 ======================================================
-(H9: descomposición de 1_Run_Simulation.py, de 1,451 a 163 líneas,
-en 7 módulos nuevos)
+(Fase 4 del GIS Workstation: shocks compuestos multi-sector)
 
-Este zip contiene TODO lo de las 4 rondas juntas — no hace falta que
-hayas aplicado las rondas anteriores primero, aunque si ya lo hiciste
-no pasa nada, se sobrescribe igual.
+Esta ronda es más chica que las anteriores: solo 5 archivos, ya que
+las rondas 1-4 (auditoría completa) ya las migraste con éxito.
 
 PASO 1 — Copiar los archivos
 ------------------------------------------------
-Arrastra TODO el contenido de este zip encima de la carpeta de tu
-repositorio real, dejando que sobrescriba lo que ya existe. Esto
-incluye 5 archivos completamente NUEVOS que antes no existían:
+Arrastra TODO el contenido de este zip encima de tu repositorio real,
+dejando que sobrescriba:
 
-    app/components/simulation_map.py
-    app/components/simulation_styles.py
-    app/components/simulation_toolbar.py
-    app/helpers/scenario_manager.py
-    app/helpers/simulation_formatting.py
-    app/panels/simulation_comparison.py
-    app/panels/simulation_result.py
+    serio/loader.py                          <- MODIFICADO (método nuevo,
+                                                 nada existente cambió)
+    app/components/simulation_toolbar.py     <- MODIFICADO (checkbox nuevo)
+    app/pages/1_Run_Simulation.py            <- MODIFICADO
+    tests/test_simular_multiple.py           <- NUEVO
+    tests/test_app_pages.py                  <- MODIFICADO (2 tests más)
 
-Y reemplaza `app/pages/1_Run_Simulation.py` por una versión mucho más
-corta (163 líneas) que ahora solo orquesta esos módulos nuevos.
-
-PASO 2 — Verificar que quedaron los archivos con espacio borrados
+PASO 2 — Verificar que todo sigue funcionando
 ------------------------------------------------
-Si por algún motivo todavía tienes estos dos archivos (de rondas
-anteriores), bórralos ahora:
-
-    app/pages/1_Run Simulation.py     <- BORRAR si existe
-    app/pages/2_View Results.py       <- BORRAR si existe
-
-Y este también, si sigue ahí:
-
-    spatial/warehouse/crosswalk_old.py   <- BORRAR si existe
-
-PASO 3 — Verificar que todo sigue funcionando
-------------------------------------------------
-    pip install -r requirements.txt
     python -m pytest tests/ -q
 
-Debe decir "349 passed" al final.
+Debe decir "358 passed" al final.
 
-PASO 4 — Qué cambió de verdad en esta ronda
+PASO 3 — Qué es nuevo, en términos de producto
 ------------------------------------------------
-Ningún comportamiento visible cambió — la página se ve y funciona
-exactamente igual. Lo que cambió es solo la organización del código:
-un archivo de 1,451 líneas se volvió 7 archivos más chicos y fáciles
-de entender, cada uno con una sola responsabilidad (estilos, toolbar,
-mapa, formato, historial de escenarios, resultado, comparación). Se
-verificó con una prueba automatizada que hace clic real en "Launch" y
-corre una simulación completa de punta a punta, no solo que la página
-cargue.
+En "Run Simulation" ahora hay un checkbox: "➕ Escenario compuesto —
+varios sectores a la vez". Con él apagado (default), todo funciona
+exactamente igual que antes — cero cambios de comportamiento. Con él
+activado, puedes elegir varios sectores y definir un monto de shock
+distinto para cada uno; el motor los combina en un solo escenario
+(matemáticamente equivalente a sumar cada sector por separado, ya que
+el modelo de Leontief es lineal — verificado con una prueba dedicada
+que compara ambos caminos y confirma que dan el mismo resultado hasta
+el último decimal).
 
-NOTA: NO toques nada dentro de tu carpeta data/ — esos son tus
-artefactos reales, no se tocaron en esta corrección.
+No se tocó ningún módulo cerrado del pipeline espacial (Stage 5 en
+adelante) — solo se agregó un método nuevo en `serio/loader.py`
+(`simular_multiple`), sin modificar el método existente `simular()`.

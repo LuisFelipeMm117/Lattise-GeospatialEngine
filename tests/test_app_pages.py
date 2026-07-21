@@ -94,6 +94,38 @@ def test_switch_page_references_point_to_existing_files():
     assert not offenders, f"st.switch_page() apuntando a archivos inexistentes: {offenders}"
 
 
+def test_run_simulation_composite_shock_mode():
+    """Fase 4 (GIS Workstation): el toolbar de Run Simulation ahora
+    soporta escenarios con varios sectores a la vez
+    (`toolbar_compuesto` -> `toolbar_sectores_compuesto` -> N
+    `number_input`s). Ejercita el flujo completo con un escenario
+    compuesto real: activar el checkbox, elegir 2 sectores, definir
+    monto por sector, y presionar Launch -- debe correr
+    `ModeloEconomico.simular_multiple()` seguido de
+    `run_simulation_engine()` sin excepciones."""
+    at = AppTest.from_file(str(_REPO_ROOT / "app/pages/1_Run_Simulation.py"), default_timeout=90)
+    at.run()
+    assert not at.exception
+
+    at.checkbox(key="toolbar_compuesto").set_value(True)
+    at.run()
+    assert not at.exception
+    assert len(at.multiselect) == 1, "El modo compuesto debe mostrar el multiselect de sectores."
+
+    opts = at.multiselect(key="toolbar_sectores_compuesto").options
+    elegidos = opts[:2]
+    at.multiselect(key="toolbar_sectores_compuesto").set_value(elegidos)
+    at.run()
+    assert not at.exception
+    assert len(at.number_input) == 2, "Debe haber un number_input de monto por cada sector elegido."
+
+    launch_buttons = [b for b in at.button if b.label == "▶ Launch"]
+    launch_buttons[0].click()
+    at.run()
+    assert not at.exception, f"Escenario compuesto falló: {at.exception}"
+    assert len(at.markdown) > 10
+
+
 def test_run_simulation_full_flow_after_decomposition():
     """Regresión específica de H9: `1_Run_Simulation.py` se descompuso
     de 1,451 líneas en 7 módulos (`simulation_styles`,
