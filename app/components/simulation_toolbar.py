@@ -16,6 +16,7 @@ de la pagina (EJECUCION), que decide cuando llamar a
 """
 from __future__ import annotations
 
+import numpy as np
 import streamlit as st
 
 from app.helpers.formatting import md
@@ -93,20 +94,43 @@ def render_toolbar(modelo) -> dict:
         )
         monto_pesos = sum(shocks.values())
 
-    with t4:
-        rho = st.slider("ρ — Spatial Decay", 0.0, 0.95, 0.35, 0.01)
+    sensibilidad = st.checkbox(
+        "📈 Análisis de sensibilidad — barrido de ρ",
+        value=False, key="toolbar_sensibilidad",
+        help="Corre el MISMO escenario para varios valores de ρ en vez de "
+             "uno solo, para ver qué tan sensible es el resultado al "
+             "supuesto de decaimiento espacial. No repite el reparto del "
+             "shock (Stage 7) por cada ρ — solo la propagación.",
+    )
+
+    if not sensibilidad:
+        with t4:
+            rho = st.slider("ρ — Spatial Decay", 0.0, 0.95, 0.35, 0.01)
+        rho_values = None
+    else:
+        with t4:
+            rho_min, rho_max = st.slider(
+                "Rango de ρ a barrer", 0.0, 0.95, (0.0, 0.7), 0.05, key="toolbar_rho_rango",
+            )
+        n_puntos = st.slider("Puntos en el barrido", 3, 15, 8, key="toolbar_rho_puntos")
+        rho_values = [round(v, 4) for v in np.linspace(rho_min, rho_max, n_puntos)]
+        rho = rho_values[-1]  # para el chip informativo, ver abajo
 
     with t5:
         st.markdown('<div style="height:26px;"></div>', unsafe_allow_html=True)
         launch = st.button("▶ Launch", type="primary", use_container_width=True)
 
     chip_sector = "🏭 <b>Sectores</b>" if compuesto and len(shocks) > 1 else "🏭 <b>Sector</b>"
+    chip_rho = (
+        f"🌊 <b>ρ</b>{rho:.2f}" if not sensibilidad
+        else f"🌊 <b>ρ</b>{rho_values[0]:.2f}–{rho_values[-1]:.2f} ({len(rho_values)} pts)"
+    )
     md(f"""
     <div class="chip-row">
         <span class="chip accent">📍 <b>Region</b>{estado_nombre}</span>
         <span class="chip accent">{chip_sector}{sector_name}</span>
         <span class="chip accent">💰 <b>Shock total</b>{format_money(monto_pesos)}</span>
-        <span class="chip accent">🌊 <b>ρ</b>{rho:.2f}</span>
+        <span class="chip accent">{chip_rho}</span>
     </div>
     """)
     st.markdown('</div>', unsafe_allow_html=True)
@@ -118,5 +142,7 @@ def render_toolbar(modelo) -> dict:
         "sector_name": sector_name,
         "monto_pesos": monto_pesos,
         "rho": rho,
+        "modo_sensibilidad": sensibilidad,
+        "rho_values": rho_values,
         "launch": launch,
     }

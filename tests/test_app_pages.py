@@ -126,6 +126,55 @@ def test_run_simulation_composite_shock_mode():
     assert len(at.markdown) > 10
 
 
+def test_run_simulation_sensitivity_mode():
+    """Fase 5 (GIS Workstation): barrido de ρ. Ejercita el flujo
+    completo con un sector con cobertura espacial real (112) — activar
+    el checkbox de sensibilidad, ajustar el rango, presionar Launch, y
+    confirmar que el panel de sensibilidad se renderiza con métricas
+    numéricas reales (no None/NaN sin manejar)."""
+    at = AppTest.from_file(str(_REPO_ROOT / "app/pages/1_Run_Simulation.py"), default_timeout=90)
+    at.run()
+    assert not at.exception
+
+    sb = [s for s in at.selectbox if s.label == "Economic Sector"][0]
+    opt_112 = [o for o in sb.options if o.startswith("112")][0]
+    sb.set_value(opt_112)
+    at.run()
+
+    at.checkbox(key="toolbar_sensibilidad").set_value(True)
+    at.run()
+    assert not at.exception
+    assert len(at.slider) >= 2, "Debe aparecer el slider de rango de ρ y el de # de puntos."
+
+    launch_buttons = [b for b in at.button if b.label == "▶ Launch"]
+    launch_buttons[0].click()
+    at.run()
+    assert not at.exception, f"Barrido de sensibilidad falló: {at.exception}"
+
+    metric_labels = {m.label for m in at.metric}
+    assert "Multiplicador mínimo" in metric_labels
+    assert "Multiplicador máximo" in metric_labels
+    mult_min = [m.value for m in at.metric if m.label == "Multiplicador mínimo"][0]
+    assert mult_min != "—", "El sector 112 tiene cobertura espacial real; no debería quedar indefinido."
+
+
+def test_run_simulation_sensitivity_mode_zero_coverage_sector_does_not_crash():
+    """Regresión específica: se encontró que el sector default (111,
+    sin cobertura espacial) produce ΣS=0 y por lo tanto
+    `multiplicador_global=NaN` para todo el barrido -- el panel debe
+    mostrar un mensaje claro, no truena con
+    `TypeError: unsupported format string passed to NoneType.__format__`."""
+    at = AppTest.from_file(str(_REPO_ROOT / "app/pages/1_Run_Simulation.py"), default_timeout=90)
+    at.run()
+    at.checkbox(key="toolbar_sensibilidad").set_value(True)
+    at.run()
+
+    launch_buttons = [b for b in at.button if b.label == "▶ Launch"]
+    launch_buttons[0].click()
+    at.run()
+    assert not at.exception, f"Sector sin cobertura espacial rompió el panel: {at.exception}"
+
+
 def test_run_simulation_full_flow_after_decomposition():
     """Regresión específica de H9: `1_Run_Simulation.py` se descompuso
     de 1,451 líneas en 7 módulos (`simulation_styles`,

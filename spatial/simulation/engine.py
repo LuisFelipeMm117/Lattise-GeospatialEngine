@@ -71,10 +71,13 @@ from spatial.simulation.matrix import SpatialMatrix
 from spatial.simulation.operator import (
     DEFAULT_COND_TOL,
     DEFAULT_SHOCK_COL,
+    InvalidRhoError,
     PropagationReport,
     ShockVectorReport,
+    SingularPropagationMatrixError,
     load_shock_vector,
     propagate,
+    spectral_radius,
 )
 from spatial.warehouse.builder import SECTOR_COL
 
@@ -311,10 +314,142 @@ def run_simulation_engine(
     return gdf_final, report
 
 
+# ══════════════════════════════════════════════════════════════════════════
+# Análisis de sensibilidad — Fase 5 (GIS Workstation)
+# ══════════════════════════════════════════════════════════════════════════
+def run_rho_sensitivity(
+    resultado_simulacion: Mapping[str, Any],
+    rho_values: list[float],
+    warehouse_parquet_path: str | Path = WAREHOUSE_PARQUET,
+    shock_ageb_output_path: str | Path = SHOCK_AGEB_PARQUET,
+    gal_path: str | Path = GRAPH_GAL_PATH,
+    metadata_path: Optional[str | Path] = GRAPH_METADATA_JSON,
+    integrity_report: Optional[dict] = None,
+    id_col: str = AGEB_ID_COL,
+    sector_col: str = SECTOR_COL,
+    shock_sector_col: str = DEFAULT_SECTOR_COL,
+    shock_delta_col: str = DEFAULT_DELTA_COL,
+    shock_col: str = DEFAULT_SHOCK_COL,
+    strict_shock_alignment: bool = True,
+    cond_tol: float = DEFAULT_COND_TOL,
+    tol: float = 1e-6,
+) -> tuple[pd.DataFrame, dict]:
+    """
+    Corre el MISMO escenario (mismo `resultado_simulacion`, mismo shock S)
+    a través de varios valores de ρ, para responder "¿qué tan sensible es
+    el resultado a mi supuesto de decaimiento espacial?" — sin volver a
+    calcular Stage 7 (SSD) una vez por cada ρ.
+
+        ModeloEconomico.simular() [ya ejecutado por el caller]
+            → generate_shock_ageb_from_simulacion()   (Stage 7, CERRADO) — UNA vez
+            → SpatialMatrix.from_gal()                (Stage 8A, CERRADO) — UNA vez
+            → load_shock_vector()                     (Stage 8B, CERRADO) — UNA vez
+            → propagate()                             (Stage 8B, CERRADO) — UNA vez POR ρ
+            → tabla (ρ, ΣS, ΣY, multiplicador) + metadatos del barrido
+
+    Por qué esto es correcto (no una aproximación): S (Stage 7) y W
+    (Stage 8A) NO dependen de ρ — solo el operador `(I − ρW)^-1` lo
+    hace. Recalcularlos una vez por ρ (como haría llamar a
+    `run_simulation_engine()` en un loop) sería redundante, no más
+    correcto — este incremento reordena el trabajo, no inventa
+    matemática nueva. `propagate()` en sí no se toca ni se reimplementa
+    aquí: se sigue llamando tal cual, una vez por valor de ρ.
+
+    Valores de ρ inválidos (fuera de `(-1, 1)` o del límite efectivo
+    `1/radio_espectral(W)`) o que produzcan una `(I − ρW)` mal
+    condicionada NO abortan todo el barrido — se omiten de la tabla y
+    se reportan en `meta["errores"]`, para que la UI pueda mostrar
+    "estos valores de ρ no son válidos para esta W" en vez de tronar.
+
+    Parámetros
+    ----------
+    resultado_simulacion, warehouse_parquet_path, shock_ageb_output_path,
+    gal_path, metadata_path, integrity_report, id_col, sector_col,
+    shock_sector_col, shock_delta_col, shock_col, strict_shock_alignment,
+    cond_tol, tol : idénticos a `run_simulation_engine()` — mismos
+        nombres, mismos defaults, mismo significado.
+    rho_values : lista de ρ a evaluar, en cualquier orden.
+
+    Devuelve
+    --------
+    (df_sensibilidad, meta) :
+        `df_sensibilidad` — un DataFrame con una fila por ρ VÁLIDO
+        evaluado, columnas `rho`, `suma_S`, `suma_Y`,
+        `multiplicador_global` (NaN cuando ΣS=0 y el multiplicador no
+        está definido — nunca `None`, para que la columna se mantenga
+        `float64` en pandas/Plotly sin casos especiales río abajo),
+        `condicion_I_menos_rhoW`, ordenado por `rho` ascendente.
+        `meta` — dict con `radio_espectral_W`, `rho_max_efectivo`,
+        `criterio`, `n_rho_evaluados`, `n_rho_invalidos`, `errores`
+        (lista de `{"rho": ..., "error": ...}` para cada ρ omitido).
+    """
+    # ── 1-3: idéntico a run_simulation_engine(), UNA sola vez ──────────────
+    gdf_shock, alloc_report = generate_shock_ageb_from_simulacion(
+        resultado_simulacion,
+        parquet_path=warehouse_parquet_path,
+        output_path=shock_ageb_output_path,
+        integrity_report=integrity_report,
+        id_col=id_col,
+        sector_col=sector_col,
+        shock_sector_col=shock_sector_col,
+        shock_delta_col=shock_delta_col,
+        tol=tol,
+        write=True,
+    )
+    sm = SpatialMatrix.from_gal(gal_path, metadata_path)
+    S, shock_report = load_shock_vector(
+        sm,
+        parquet_path=shock_ageb_output_path,
+        id_col=id_col,
+        shock_col=shock_col,
+        strict=strict_shock_alignment,
+    )
+
+    radio_espectral = spectral_radius(sm.W)
+    rho_max_efectivo = (1.0 / radio_espectral) if radio_espectral > 0.0 else float("inf")
+
+    filas = []
+    errores = []
+    for rho in rho_values:
+        try:
+            _Y, prop_report = propagate(sm, S, rho, cond_tol=cond_tol)
+        except (InvalidRhoError, SingularPropagationMatrixError) as exc:
+            errores.append({"rho": float(rho), "error": str(exc)})
+            continue
+        filas.append({
+            "rho": prop_report.rho,
+            "suma_S": prop_report.suma_S,
+            "suma_Y": prop_report.suma_Y,
+            "multiplicador_global": (
+                prop_report.multiplicador_global
+                if prop_report.multiplicador_global is not None else float("nan")
+            ),
+            "condicion_I_menos_rhoW": prop_report.condicion_I_menos_rhoW,
+        })
+
+    df_sensibilidad = pd.DataFrame(
+        filas, columns=["rho", "suma_S", "suma_Y", "multiplicador_global", "condicion_I_menos_rhoW"],
+    ).sort_values("rho").reset_index(drop=True)
+
+    meta = {
+        "radio_espectral_W": radio_espectral,
+        "rho_max_efectivo": rho_max_efectivo,
+        "criterio": sm.criterio,
+        "n_agebs": len(sm.ids),
+        "n_rho_evaluados": len(filas),
+        "n_rho_invalidos": len(errores),
+        "errores": errores,
+        "allocation_report": alloc_report.to_dict(),
+        "shock_vector_report": shock_report.to_dict(),
+    }
+    return df_sensibilidad, meta
+
+
 __all__ = [
     "IMPACTO_DIRECTO_COL",
     "IMPACTO_PROPAGADO_COL",
     "IMPACTO_INDIRECTO_COL",
     "SimulationReport",
     "run_simulation_engine",
+    "run_rho_sensitivity",
 ]

@@ -16,16 +16,18 @@ comportamiento: cada bloque se movió tal cual a su módulo, verificado
 con `streamlit.testing.v1.AppTest` antes y después del refactor.
 
     app/components/simulation_styles.py   — CSS (lenguaje visual GIS)
-    app/components/simulation_toolbar.py  — definición de escenario
+    app/components/simulation_toolbar.py  — definición de escenario (Fases 4-5)
     app/components/simulation_map.py      — mapa + panel de detalle
     app/helpers/simulation_formatting.py  — format_money/format_compact
     app/helpers/scenario_manager.py       — historial de escenarios (Fase 2)
     app/panels/simulation_result.py       — resultado completo (Fase 1)
     app/panels/simulation_comparison.py   — comparación lado a lado (Fase 3)
+    app/panels/simulation_sensitivity.py  — barrido de ρ (Fase 5)
 
 Esta página es ahora solo el "conductor": carga el modelo, dispara la
-simulación cuando se presiona Launch, y decide cuál de los tres estados
-(comparación / resultado / vacío) renderizar. Ninguna magnitud
+simulación (simple, compuesta o barrido de sensibilidad) cuando se
+presiona Launch, y decide cuál de los cuatro estados (comparación /
+sensibilidad / resultado / vacío) renderizar. Ninguna magnitud
 económica se calcula aquí.
 """
 import sys
@@ -39,7 +41,7 @@ if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
 
 from serio.loader import ModeloEconomico  # noqa: E402
-from spatial.simulation.engine import run_simulation_engine  # noqa: E402
+from spatial.simulation.engine import run_rho_sensitivity, run_simulation_engine  # noqa: E402
 
 from app.components.simulation_styles import inject_simulation_styles  # noqa: E402
 from app.components.simulation_toolbar import render_toolbar  # noqa: E402
@@ -51,6 +53,7 @@ from app.helpers.scenario_manager import (  # noqa: E402
 )
 from app.panels.simulation_comparison import render_compare_view  # noqa: E402
 from app.panels.simulation_result import render_empty_state, render_result  # noqa: E402
+from app.panels.simulation_sensitivity import render_sensitivity  # noqa: E402
 
 st.set_page_config(
     page_title="Run Simulation — Lattise Studio",
@@ -82,6 +85,8 @@ if "compare_selection" not in st.session_state:
     st.session_state["compare_selection"] = []
 if "compare_mode" not in st.session_state:
     st.session_state["compare_mode"] = False
+if "last_run_mode" not in st.session_state:
+    st.session_state["last_run_mode"] = None
 
 # ══════════════════════════════════════════════════════════
 # HEADER
@@ -106,6 +111,8 @@ shocks = toolbar["shocks"]
 sector_name = toolbar["sector_name"]
 monto_pesos = toolbar["monto_pesos"]
 rho = toolbar["rho"]
+modo_sensibilidad = toolbar["modo_sensibilidad"]
+rho_values = toolbar["rho_values"]
 launch = toolbar["launch"]
 
 # ══════════════════════════════════════════════════════════
@@ -117,30 +124,52 @@ launch = toolbar["launch"]
 # ══════════════════════════════════════════════════════════
 if launch:
     st.session_state["selected_ageb_id"] = None
-    with st.spinner("Running simulation…"):
-        try:
-            # simular_multiple() generaliza simular() a N sectores; con 1
-            # solo sector da un resultado idéntico (ver
-            # tests/test_simular_multiple.py::test_single_sector_matches_simular_exactly).
-            resultado_simulacion = modelo.simular_multiple(estado_key, shocks)
-            gdf_final, report = run_simulation_engine(resultado_simulacion, rho)
-        except Exception as e:
-            st.error(f"Simulation failed: {e}")
-        else:
-            scenario_dict = {
-                "estado": estado_nombre,
-                "estado_key": estado_key,
-                "sector": sector_name,
-                "shocks": shocks,
-                "shocks_detalle": resultado_simulacion.get("shocks_detalle", []),
-                "monto_pesos": monto_pesos,
-                "rho": rho,
-            }
-            entry = new_history_entry(scenario_dict, gdf_final, report)
-            history = st.session_state.setdefault("scenario_history", [])
-            history.insert(0, entry)
-            del history[MAX_SCENARIO_HISTORY:]
-            activate_entry(entry)
+
+    if modo_sensibilidad:
+        with st.spinner(f"Corriendo barrido de sensibilidad ({len(rho_values)} valores de ρ)…"):
+            try:
+                # simular_multiple() se corre UNA vez (no depende de ρ);
+                # run_rho_sensitivity() reutiliza esa S para cada ρ del
+                # barrido, sin recalcular Stage 7 por cada uno.
+                resultado_simulacion = modelo.simular_multiple(estado_key, shocks)
+                df_sensibilidad, meta_sensibilidad = run_rho_sensitivity(resultado_simulacion, rho_values)
+            except Exception as e:
+                st.error(f"Sensitivity sweep failed: {e}")
+            else:
+                st.session_state["sensitivity_df"] = df_sensibilidad
+                st.session_state["sensitivity_meta"] = meta_sensibilidad
+                st.session_state["sensitivity_scenario"] = {
+                    "estado": estado_nombre, "estado_key": estado_key,
+                    "sector": sector_name, "shocks": shocks, "monto_pesos": monto_pesos,
+                }
+                st.session_state["last_run_mode"] = "sensitivity"
+
+    else:
+        with st.spinner("Running simulation…"):
+            try:
+                # simular_multiple() generaliza simular() a N sectores; con 1
+                # solo sector da un resultado idéntico (ver
+                # tests/test_simular_multiple.py::test_single_sector_matches_simular_exactly).
+                resultado_simulacion = modelo.simular_multiple(estado_key, shocks)
+                gdf_final, report = run_simulation_engine(resultado_simulacion, rho)
+            except Exception as e:
+                st.error(f"Simulation failed: {e}")
+            else:
+                scenario_dict = {
+                    "estado": estado_nombre,
+                    "estado_key": estado_key,
+                    "sector": sector_name,
+                    "shocks": shocks,
+                    "shocks_detalle": resultado_simulacion.get("shocks_detalle", []),
+                    "monto_pesos": monto_pesos,
+                    "rho": rho,
+                }
+                entry = new_history_entry(scenario_dict, gdf_final, report)
+                history = st.session_state.setdefault("scenario_history", [])
+                history.insert(0, entry)
+                del history[MAX_SCENARIO_HISTORY:]
+                activate_entry(entry)
+                st.session_state["last_run_mode"] = "single"
 
 render_scenario_manager()
 
@@ -154,6 +183,12 @@ _compare_ready = (
 
 if _compare_ready:
     render_compare_view(_history_by_id[_compare_ids[0]], _history_by_id[_compare_ids[1]])
+elif st.session_state.get("last_run_mode") == "sensitivity" and "sensitivity_df" in st.session_state:
+    render_sensitivity(
+        st.session_state["sensitivity_df"],
+        st.session_state["sensitivity_meta"],
+        st.session_state.get("sensitivity_scenario", {}),
+    )
 else:
     st.session_state["compare_mode"] = False
     _has_result = "simulation_report" in st.session_state and "simulation_gdf" in st.session_state
