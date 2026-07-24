@@ -141,7 +141,7 @@ def test_run_simulation_sensitivity_mode():
     sb.set_value(opt_112)
     at.run()
 
-    at.checkbox(key="toolbar_sensibilidad").set_value(True)
+    at.radio(key="toolbar_modo_rho").set_value("📈 Barrido de sensibilidad")
     at.run()
     assert not at.exception
     assert len(at.slider) >= 2, "Debe aparecer el slider de rango de ρ y el de # de puntos."
@@ -166,7 +166,7 @@ def test_run_simulation_sensitivity_mode_zero_coverage_sector_does_not_crash():
     `TypeError: unsupported format string passed to NoneType.__format__`."""
     at = AppTest.from_file(str(_REPO_ROOT / "app/pages/1_Run_Simulation.py"), default_timeout=90)
     at.run()
-    at.checkbox(key="toolbar_sensibilidad").set_value(True)
+    at.radio(key="toolbar_modo_rho").set_value("📈 Barrido de sensibilidad")
     at.run()
 
     launch_buttons = [b for b in at.button if b.label == "▶ Launch"]
@@ -199,3 +199,61 @@ def test_run_simulation_full_flow_after_decomposition():
     # El resultado debe haberse renderizado (KPIs/insights/ranking) — no
     # solo "no truena", sino que produce contenido real.
     assert len(at.markdown) > 10, "render_result no parece haber producido contenido."
+
+
+def test_run_simulation_calibration_mode():
+    """Fase 6 (GIS Workstation): calibración de ρ por autocorrelación
+    espacial (Moran's I) -- ver spatial/simulation/calibration.py, NO
+    es una estimación causal. Ejercita el flujo completo con un sector
+    con cobertura espacial real (112): elegir "Calibrar
+    automáticamente" en el radio de modo de ρ, presionar Launch, y
+    confirmar que el panel de calibración se renderiza con un ρ
+    calibrado numérico real."""
+    at = AppTest.from_file(str(_REPO_ROOT / "app/pages/1_Run_Simulation.py"), default_timeout=240)
+    at.run()
+    assert not at.exception
+
+    sb = [s for s in at.selectbox if s.label == "Economic Sector"][0]
+    opt_112 = [o for o in sb.options if o.startswith("112")][0]
+    sb.set_value(opt_112)
+    at.run()
+
+    radios = [r for r in at.radio if r.label == "¿Cómo definir ρ?"]
+    assert radios, "No se encontró el radio de modo de ρ en el toolbar."
+    radios[0].set_value("🎯 Calibrar automáticamente")
+    at.run()
+    assert not at.exception
+
+    launch_buttons = [b for b in at.button if b.label == "▶ Launch"]
+    launch_buttons[0].click()
+    at.run()
+    assert not at.exception, f"Calibración de ρ falló: {at.exception}"
+
+    metric_labels = {m.label for m in at.metric}
+    assert "ρ calibrado" in metric_labels
+    assert "Moran's I observado" in metric_labels
+    assert "Moran's I del modelo" in metric_labels
+    rho_val = [m.value for m in at.metric if m.label == "ρ calibrado"][0]
+    assert rho_val not in ("—", ""), "El ρ calibrado no debería quedar indefinido para el sector 112."
+
+    # El descargo metodológico debe estar presente (no opcional, no en
+    # letra chica) -- ver app/panels/simulation_calibration.py.
+    all_text = " ".join(w.value for w in at.warning) if at.warning else ""
+    assert "NO es una estimación causal" in all_text
+
+
+def test_run_simulation_calibration_mode_zero_coverage_sector_does_not_crash():
+    """Regresión: el sector default (111, sin cobertura espacial) debe
+    producir un resultado de calibración degenerado manejado con
+    gracia (convergio=False), nunca una excepción no capturada."""
+    at = AppTest.from_file(str(_REPO_ROOT / "app/pages/1_Run_Simulation.py"), default_timeout=240)
+    at.run()
+
+    radios = [r for r in at.radio if r.label == "¿Cómo definir ρ?"]
+    radios[0].set_value("🎯 Calibrar automáticamente")
+    at.run()
+
+    launch_buttons = [b for b in at.button if b.label == "▶ Launch"]
+    launch_buttons[0].click()
+    at.run()
+    assert not at.exception, f"Sector sin cobertura espacial rompió la calibración: {at.exception}"

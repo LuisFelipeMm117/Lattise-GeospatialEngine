@@ -94,16 +94,29 @@ def render_toolbar(modelo) -> dict:
         )
         monto_pesos = sum(shocks.values())
 
-    sensibilidad = st.checkbox(
-        "📈 Análisis de sensibilidad — barrido de ρ",
-        value=False, key="toolbar_sensibilidad",
-        help="Corre el MISMO escenario para varios valores de ρ en vez de "
-             "uno solo, para ver qué tan sensible es el resultado al "
-             "supuesto de decaimiento espacial. No repite el reparto del "
-             "shock (Stage 7) por cada ρ — solo la propagación.",
+    modo_rho = st.radio(
+        "¿Cómo definir ρ?",
+        ["Manual", "📈 Barrido de sensibilidad", "🎯 Calibrar automáticamente"],
+        horizontal=True, key="toolbar_modo_rho",
+        help="Manual: eliges un solo ρ. Barrido: corres el mismo escenario "
+             "para varios ρ. Calibrar: el motor busca el ρ cuyo patrón "
+             "espacial de propagación es más consistente con el patrón ya "
+             "observado en la actividad económica real de la región — "
+             "NO es una estimación causal (eso requiere datos de panel "
+             "temporal, hoy no disponibles). Ver spatial/simulation/calibration.py.",
     )
+    sensibilidad = modo_rho == "📈 Barrido de sensibilidad"
+    calibrar = modo_rho == "🎯 Calibrar automáticamente"
 
-    if not sensibilidad:
+    if calibrar:
+        with t4:
+            st.caption(
+                "🎯 ρ se calibrará al presionar Launch (Moran's I) — "
+                "ver metodología en el resultado."
+            )
+        rho = None
+        rho_values = None
+    elif not sensibilidad:
         with t4:
             rho = st.slider("ρ — Spatial Decay", 0.0, 0.95, 0.35, 0.01)
         rho_values = None
@@ -121,10 +134,12 @@ def render_toolbar(modelo) -> dict:
         launch = st.button("▶ Launch", type="primary", use_container_width=True)
 
     chip_sector = "🏭 <b>Sectores</b>" if compuesto and len(shocks) > 1 else "🏭 <b>Sector</b>"
-    chip_rho = (
-        f"🌊 <b>ρ</b>{rho:.2f}" if not sensibilidad
-        else f"🌊 <b>ρ</b>{rho_values[0]:.2f}–{rho_values[-1]:.2f} ({len(rho_values)} pts)"
-    )
+    if calibrar:
+        chip_rho = "🌊 <b>ρ</b>se calibra al ejecutar"
+    elif not sensibilidad:
+        chip_rho = f"🌊 <b>ρ</b>{rho:.2f}"
+    else:
+        chip_rho = f"🌊 <b>ρ</b>{rho_values[0]:.2f}–{rho_values[-1]:.2f} ({len(rho_values)} pts)"
     md(f"""
     <div class="chip-row">
         <span class="chip accent">📍 <b>Region</b>{estado_nombre}</span>
@@ -143,6 +158,7 @@ def render_toolbar(modelo) -> dict:
         "monto_pesos": monto_pesos,
         "rho": rho,
         "modo_sensibilidad": sensibilidad,
+        "modo_calibrar": calibrar,
         "rho_values": rho_values,
         "launch": launch,
     }

@@ -41,6 +41,7 @@ if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
 
 from serio.loader import ModeloEconomico  # noqa: E402
+from spatial.simulation.calibration import calibrate_rho  # noqa: E402
 from spatial.simulation.engine import run_rho_sensitivity, run_simulation_engine  # noqa: E402
 
 from app.components.simulation_styles import inject_simulation_styles  # noqa: E402
@@ -51,6 +52,7 @@ from app.helpers.scenario_manager import (  # noqa: E402
     new_history_entry,
     render_scenario_manager,
 )
+from app.panels.simulation_calibration import render_calibration_summary  # noqa: E402
 from app.panels.simulation_comparison import render_compare_view  # noqa: E402
 from app.panels.simulation_result import render_empty_state, render_result  # noqa: E402
 from app.panels.simulation_sensitivity import render_sensitivity  # noqa: E402
@@ -112,6 +114,7 @@ sector_name = toolbar["sector_name"]
 monto_pesos = toolbar["monto_pesos"]
 rho = toolbar["rho"]
 modo_sensibilidad = toolbar["modo_sensibilidad"]
+modo_calibrar = toolbar["modo_calibrar"]
 rho_values = toolbar["rho_values"]
 launch = toolbar["launch"]
 
@@ -143,6 +146,41 @@ if launch:
                     "sector": sector_name, "shocks": shocks, "monto_pesos": monto_pesos,
                 }
                 st.session_state["last_run_mode"] = "sensitivity"
+
+    elif modo_calibrar:
+        with st.spinner("Calibrando ρ (Moran's I) y corriendo la simulación…"):
+            try:
+                resultado_simulacion = modelo.simular_multiple(estado_key, shocks)
+                calibration_result = calibrate_rho(resultado_simulacion)
+                # Nota de eficiencia (no de corrección): calibrate_rho() ya
+                # corrió Stage 7 internamente para buscar el ρ; esta segunda
+                # llamada a run_simulation_engine() vuelve a correr Stage 7
+                # para ensamblar el GeoDataFrame final con ese ρ. Es
+                # redundante pero barato (mismo patrón que ya existe entre
+                # run_simulation_engine() y run_rho_sensitivity() —
+                # funciones independientes, cada una corre su propio
+                # Stage 7). No vale la pena fusionarlas por ahora.
+                gdf_final, report = run_simulation_engine(resultado_simulacion, calibration_result.rho_calibrado)
+            except Exception as e:
+                st.error(f"Calibration failed: {e}")
+            else:
+                scenario_dict = {
+                    "estado": estado_nombre,
+                    "estado_key": estado_key,
+                    "sector": sector_name,
+                    "shocks": shocks,
+                    "shocks_detalle": resultado_simulacion.get("shocks_detalle", []),
+                    "monto_pesos": monto_pesos,
+                    "rho": calibration_result.rho_calibrado,
+                    "rho_calibrado": True,
+                }
+                entry = new_history_entry(scenario_dict, gdf_final, report)
+                history = st.session_state.setdefault("scenario_history", [])
+                history.insert(0, entry)
+                del history[MAX_SCENARIO_HISTORY:]
+                activate_entry(entry)
+                st.session_state["calibration_result"] = calibration_result
+                st.session_state["last_run_mode"] = "calibrated"
 
     else:
         with st.spinner("Running simulation…"):
@@ -192,6 +230,12 @@ elif st.session_state.get("last_run_mode") == "sensitivity" and "sensitivity_df"
 else:
     st.session_state["compare_mode"] = False
     _has_result = "simulation_report" in st.session_state and "simulation_gdf" in st.session_state
+    if st.session_state.get("last_run_mode") == "calibrated" and "calibration_result" in st.session_state:
+        render_calibration_summary(
+            st.session_state["calibration_result"],
+            st.session_state.get("simulation_scenario", {}),
+        )
+        st.markdown('<hr class="thin">', unsafe_allow_html=True)
     if _has_result:
         render_result(
             st.session_state["simulation_report"],
