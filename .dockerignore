@@ -1,0 +1,14 @@
+.git
+.gitattributes
+.github
+.streamlit
+app/
+tests/
+examples/
+scripts/
+*.md
+__pycache__
+*.pyc
+.pytest_cache
+.venv
+venv/

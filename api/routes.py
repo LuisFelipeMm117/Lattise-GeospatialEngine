@@ -21,11 +21,25 @@ orquestador de más alto nivel, `Scenario.run()`), y los endpoints de
 """
 from __future__ import annotations
 
+import tempfile
+import uuid
+from pathlib import Path
+
 from flask import Blueprint, current_app, jsonify, request
 
 from spatial.simulation.scenario import Scenario, ScenarioConfigError
 
 bp = Blueprint("api", __name__)
+
+
+def _scoped_shock_ageb_path() -> Path:
+    """Ruta temporal única por request (bugfix — ver docstring de
+    `simulate()` para el detalle de la condición de carrera que esto
+    corrige). `Scenario.run()` (spatial/, CERRADO) ya acepta
+    `shock_ageb_output` como parámetro explícito; el bug estaba en que
+    esta ruta no lo proveía y dependía del default compartido
+    `SHOCK_AGEB_PARQUET` (`data/ssd/shock_ageb.parquet`)."""
+    return Path(tempfile.gettempdir()) / f"lattise_api_shock_ageb_{uuid.uuid4().hex}.parquet"
 
 
 def _engine_state():
@@ -70,6 +84,18 @@ def catalog():
 
 # ══════════════════════════════════════════════════════════
 # POST /simulate — envoltorio de Scenario (Stage 8D, CERRADO)
+#
+# Bugfix: `Scenario.run()` tiene como default `shock_ageb_output=
+# SHOCK_AGEB_PARQUET`, el mismo artefacto compartido y versionado que
+# usa el resto del motor (`data/ssd/shock_ageb.parquet`). Antes de este
+# fix, esta ruta no sobreescribía ese parámetro, así que cada request
+# a `/simulate` escribía sobre ese único archivo en disco. Con más de
+# un worker/request concurrente (el caso normal en un despliegue real
+# de Railway) esto es una condición de carrera genuina: dos
+# simulaciones simultáneas pueden pisarse el resultado entre sí, o una
+# puede leer el `shock_ageb.parquet` que acaba de escribir la otra.
+# El fix usa una ruta temporal única por request (nunca el artefacto
+# compartido) y la borra al terminar, éxito o error.
 # ══════════════════════════════════════════════════════════
 @bp.post("/simulate")
 def simulate():
@@ -94,10 +120,16 @@ def simulate():
         return _error("'monto' y 'rho' deben ser numéricos.", 400)
 
     scenario = Scenario(estado=str(body["estado"]), sector=str(body["sector"]), monto=monto, rho=rho)
+    shock_path = _scoped_shock_ageb_path()
     try:
-        result = scenario.run(state.modelo, state.spatial_matrix)
+        result = scenario.run(state.modelo, state.spatial_matrix, shock_ageb_output=shock_path)
     except ScenarioConfigError as exc:
         return _error(str(exc), 400)
+    finally:
+        try:
+            shock_path.unlink(missing_ok=True)
+        except OSError:
+            pass
 
     return jsonify(result.to_dict())
 

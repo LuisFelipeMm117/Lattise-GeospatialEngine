@@ -52,6 +52,7 @@ from app.helpers.scenario_manager import (  # noqa: E402
     new_history_entry,
     render_scenario_manager,
 )
+from app.helpers.scenario_paths import scoped_shock_ageb_path  # noqa: E402
 from app.panels.simulation_calibration import render_calibration_summary  # noqa: E402
 from app.panels.simulation_comparison import render_compare_view  # noqa: E402
 from app.panels.simulation_result import render_empty_state, render_result  # noqa: E402
@@ -135,7 +136,13 @@ if launch:
                 # run_rho_sensitivity() reutiliza esa S para cada ρ del
                 # barrido, sin recalcular Stage 7 por cada uno.
                 resultado_simulacion = modelo.simular_multiple(estado_key, shocks)
-                df_sensibilidad, meta_sensibilidad = run_rho_sensitivity(resultado_simulacion, rho_values)
+                # Bugfix: shock_ageb_output_path aislado (ver
+                # app/helpers/scenario_paths.py) — nunca el default
+                # compartido data/ssd/shock_ageb.parquet.
+                with scoped_shock_ageb_path() as shock_path:
+                    df_sensibilidad, meta_sensibilidad = run_rho_sensitivity(
+                        resultado_simulacion, rho_values, shock_ageb_output_path=shock_path,
+                    )
             except Exception as e:
                 st.error(f"Sensitivity sweep failed: {e}")
             else:
@@ -151,7 +158,13 @@ if launch:
         with st.spinner("Calibrando ρ (Moran's I) y corriendo la simulación…"):
             try:
                 resultado_simulacion = modelo.simular_multiple(estado_key, shocks)
-                calibration_result = calibrate_rho(resultado_simulacion)
+                # Bugfix: cada llamada usa su propia ruta aislada de
+                # shock_ageb.parquet (ver app/helpers/scenario_paths.py) —
+                # nunca el default compartido data/ssd/shock_ageb.parquet.
+                with scoped_shock_ageb_path() as shock_path_calib:
+                    calibration_result = calibrate_rho(
+                        resultado_simulacion, shock_ageb_output_path=shock_path_calib,
+                    )
                 # Nota de eficiencia (no de corrección): calibrate_rho() ya
                 # corrió Stage 7 internamente para buscar el ρ; esta segunda
                 # llamada a run_simulation_engine() vuelve a correr Stage 7
@@ -160,7 +173,11 @@ if launch:
                 # run_simulation_engine() y run_rho_sensitivity() —
                 # funciones independientes, cada una corre su propio
                 # Stage 7). No vale la pena fusionarlas por ahora.
-                gdf_final, report = run_simulation_engine(resultado_simulacion, calibration_result.rho_calibrado)
+                with scoped_shock_ageb_path() as shock_path:
+                    gdf_final, report = run_simulation_engine(
+                        resultado_simulacion, calibration_result.rho_calibrado,
+                        shock_ageb_output_path=shock_path,
+                    )
             except Exception as e:
                 st.error(f"Calibration failed: {e}")
             else:
@@ -189,7 +206,13 @@ if launch:
                 # solo sector da un resultado idéntico (ver
                 # tests/test_simular_multiple.py::test_single_sector_matches_simular_exactly).
                 resultado_simulacion = modelo.simular_multiple(estado_key, shocks)
-                gdf_final, report = run_simulation_engine(resultado_simulacion, rho)
+                # Bugfix: shock_ageb_output_path aislado (ver
+                # app/helpers/scenario_paths.py) — nunca el default
+                # compartido data/ssd/shock_ageb.parquet.
+                with scoped_shock_ageb_path() as shock_path:
+                    gdf_final, report = run_simulation_engine(
+                        resultado_simulacion, rho, shock_ageb_output_path=shock_path,
+                    )
             except Exception as e:
                 st.error(f"Simulation failed: {e}")
             else:

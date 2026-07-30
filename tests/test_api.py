@@ -97,9 +97,17 @@ def test_simulate_unknown_estado_returns_400(client):
     assert resp.status_code == 400
 
 
-def test_simulate_real_scenario_matches_scenario_report(client):
+def test_simulate_real_scenario_matches_scenario_report(client, tmp_path):
     """El endpoint debe devolver EXACTAMENTE lo mismo que
-    `Scenario.run(...).to_dict()` — no una copia reformulada."""
+    `Scenario.run(...).to_dict()` — no una copia reformulada.
+
+    Bugfix: esta llamada de comparación usa `shock_ageb_output=tmp_path/...`
+    en vez del default de `Scenario.run()` (`SHOCK_AGEB_PARQUET`, el mismo
+    `data/ssd/shock_ageb.parquet` versionado que usa el resto del motor).
+    Antes de este fix, correr este test dejaba ese artefacto modificado
+    en el working tree — el mismo síntoma que se corrigió en
+    `api/routes.py::simulate()` y en `app/pages/1_Run_Simulation.py`,
+    aquí en el lado de la prueba que llama a `Scenario.run()` directamente."""
     body = {"estado": "Aguascalientes", "sector": "111", "monto": 1_000_000.0, "rho": 0.3}
     resp = client.post("/simulate", json=body)
     assert resp.status_code == 200
@@ -108,6 +116,7 @@ def test_simulate_real_scenario_matches_scenario_report(client):
     from spatial.simulation.scenario import Scenario
     expected = Scenario(**{k: body[k] for k in ("estado", "sector", "monto", "rho")}).run(
         _state.modelo, _state.spatial_matrix,
+        shock_ageb_output=tmp_path / "shock_ageb_comparacion.parquet",
     ).to_dict()
 
     assert payload["estado_key"] == expected["estado_key"]

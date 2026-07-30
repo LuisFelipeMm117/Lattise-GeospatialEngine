@@ -17,6 +17,8 @@ python-louvain>=0.16
 
 # ── Stage 10 — API REST (api/) ──────────────────────────────────────────────
 flask>=3.0.0
+flask-cors>=4.0.0
+gunicorn>=22.0.0
  
 # ── SEE-Estimación — pendiente (Phase 3, requiere panel DENUE) ─────────────
 # libpysal>=4.9.0
