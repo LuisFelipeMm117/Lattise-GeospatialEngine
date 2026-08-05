@@ -110,6 +110,11 @@ st.set_page_config(
     initial_sidebar_state="collapsed",
 )
 
+from app.helpers.auth_gate import render_logout_button, require_auth  # noqa: E402
+
+require_auth()
+render_logout_button()
+
 # ══════════════════════════════════════════════════════════
 # CSS
 # ══════════════════════════════════════════════════════════

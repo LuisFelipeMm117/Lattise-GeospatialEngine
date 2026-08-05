@@ -25,7 +25,7 @@ diseño científico completo.
 | 8B–8D. Simulación (SEE) | `simulation/matrix.py`, `simulation/operator.py`, `simulation/engine.py`, `simulation/scenario.py` | ✅ Cerrado |
 | 9. Visualización | `visualization/maps.py` | ✅ Cerrado |
 | — | Decision Support Engine | ✅ Cerrado — ver `spatial/decision_support/README.md` |
-| 10. API REST | — | ⏳ No presente en este repositorio — confirmar paradero antes de planear la migración de infraestructura |
+| 10. API REST | `api/app.py`, `api/routes.py`, `api/state.py` | ✅ Cerrado — CORS + gunicorn + Dockerfile listos para Railway (ver "Distribución online" abajo) |
 
 Todos los stages marcados ✅ tienen tests dedicados con fixtures
 genuinas (nunca mockeadas) en `tests/`. Correr `pytest tests/ -v` para
@@ -87,14 +87,42 @@ python -m pytest tests/ -v
 streamlit run app/home.py
 ```
 
+## Distribución online — API REST (Stage 10)
+
+La API (`api/`) está lista para desplegarse como servicio independiente
+de Lattise Studio (Streamlit). Ver `Dockerfile`, `Procfile` y
+`.env.example` en la raíz del repo.
+
+```bash
+# Local, con gunicorn (mismo comando que usa el Dockerfile)
+pip install -r requirements.txt
+gunicorn -w 2 -b 0.0.0.0:8000 --timeout 120 "api.app:create_app()"
+
+# Docker
+docker build -t lattise-api .
+docker run -p 8000:8000 -e ALLOWED_ORIGINS=https://lattise.io lattise-api
+```
+
+Variables de entorno relevantes (ver `.env.example`): `ALLOWED_ORIGINS`
+(CORS, coma-separado — necesario en cuanto el frontend viva en otro
+dominio, p.ej. Next.js en Vercel), `PORT`, `WEB_CONCURRENCY`.
+
+**Pendiente antes del despliegue real en Railway:** hoy `data/`,
+`serio/data/` se empaquetan dentro de la imagen Docker (~17 MB). La
+migración a Cloudflare R2 (roadmap de infraestructura) requiere que
+`api/state.py`/`spatial/config.py` acepten rutas por variable de
+entorno y descarguen los artefactos al arrancar el contenedor, en vez
+de asumir que ya están en el filesystem de la imagen.
+
 ## Siguiente bloque de trabajo sugerido
 
-1. Confirmar si el Stage 10 (API REST Flask) existe en otra rama/repo
-   — bloqueante para la migración a Railway + Next.js.
+1. Migrar `data/`/`serio/data/` a Cloudflare R2 con descarga en el
+   arranque del contenedor (ver sección de arriba) — es el único paso
+   real que falta para el despliegue en Railway.
 2. Cerrar la duplicación de agregación restante en
-   `app/pages/4_Spatial_Cluster_Intelligence.py` (mismo patrón ya
-   aplicado a Opportunity Explorer).
-3. Descomponer `app/pages/1_Run Simulation.py` (monolito de ~1,450
-   líneas) en `helpers/components/panels`, siguiendo el patrón de
-   Opportunity Explorer, antes de definir las Fases 4–5 del GIS
-   Workstation.
+   `app/pages/4_Spatial_Cluster_Intelligence.py`, si queda alguna tras
+   el refactor de `cluster_intelligence_bridge.py` — revisar antes de
+   invertir más tiempo aquí, puede que ya no aplique.
+3. Definir las Fases 4–5 del GIS Workstation sobre
+   `app/pages/1_Run_Simulation.py` (ya descompuesto en
+   `helpers/components/panels`, ~246 líneas de orquestación).

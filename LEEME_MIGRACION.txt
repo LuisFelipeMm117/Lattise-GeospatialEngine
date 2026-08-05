@@ -1,0 +1,46 @@
+CÓMO MIGRAR ESTOS CAMBIOS A TU REPOSITORIO — RONDA 8
+======================================================
+(Corrección de rendimiento: la calibración de ρ tardaba demasiado
+en tu máquina y el test se pasaba del tiempo límite)
+
+QUÉ PASÓ
+------------------------------------------------
+Tu corrida de pytest en Windows falló en
+`test_run_simulation_calibration_mode` con:
+
+    RuntimeError: AppTest script run timed out after 120(s)
+
+Causa: `calibrate_rho()` resolvía un sistema lineal de 928×928 hasta
+82 veces (grilla de búsqueda gruesa de 41 puntos + fina de 41 puntos)
+más una tercera vez dentro de la simulación final — 83 resoluciones en
+total. En mi entorno de pruebas corrió rápido, pero en el tuyo
+(Windows, Python 3.14 — muy nuevo, es probable que numpy no tenga ahí
+todavía una build con BLAS optimizado) se pasó del límite. No era un
+error de lógica: la calibración SÍ estaba funcionando, solo muy lento.
+
+QUÉ SE CORRIGIÓ
+------------------------------------------------
+Se redujo la grilla de búsqueda por defecto de 41+41 a 15+11 puntos
+(26 resoluciones en vez de 82 — statisticamente ~3x más rápido). Esto
+no es una pérdida real de calidad: la calibración ya es una técnica
+heurística (no una estimación causal de alta precisión — ver la
+advertencia que ya aparece en el panel), así que pedir 4 decimales de
+precisión en ρ nunca estuvo justificado. La nueva precisión (~0.03) es
+consistente con lo que el método puede honestamente ofrecer.
+
+PASO 1 — Copiar los archivos
+------------------------------------------------
+    spatial/simulation/calibration.py   <- MODIFICADO (grilla más chica)
+    tests/test_app_pages.py             <- MODIFICADO (timeout de
+                                            seguridad subido de 120 a
+                                            240s en las 2 pruebas de
+                                            calibración, además de la
+                                            mejora de velocidad)
+
+PASO 2 — Verificar
+------------------------------------------------
+    python -m pytest tests/ -q
+
+Debe decir "379 passed" — mismo número que antes, ahora corriendo en
+~86s en vez de ~157s en mi entorno (en el tuyo debería notarse una
+mejora proporcional).

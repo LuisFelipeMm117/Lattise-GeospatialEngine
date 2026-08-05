@@ -19,6 +19,9 @@ python-louvain>=0.16
 flask>=3.0.0
 flask-cors>=4.0.0
 gunicorn>=22.0.0
+
+# ── Auth gate (app/helpers/auth_gate.py) ────────────────────────────────────
+supabase>=2.5.0
  
 # ── SEE-Estimación — pendiente (Phase 3, requiere panel DENUE) ─────────────
 # libpysal>=4.9.0

@@ -37,11 +37,13 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY api/ ./api/
 COPY spatial/ ./spatial/
 COPY serio/ ./serio/
-COPY data/ ./data/
+COPY scripts/bootstrap_artifacts.py ./scripts/bootstrap_artifacts.py
+RUN rm -rf ./serio/data ./data
 
 ENV PYTHONUNBUFFERED=1 \
-    PORT=8000
+    PORT=8000 \
+    LATTISE_ARTIFACTS_DIR=/var/lib/lattise/artifacts
 
 EXPOSE 8000
 
-CMD ["sh", "-c", "gunicorn -w ${WEB_CONCURRENCY:-2} -b 0.0.0.0:${PORT:-8000} --timeout 120 api.app:create_app()"]
+CMD ["sh", "-c", "python scripts/bootstrap_artifacts.py && gunicorn -w ${WEB_CONCURRENCY:-2} -b 0.0.0.0:${PORT:-8000} --timeout 120 api.app:create_app()"]

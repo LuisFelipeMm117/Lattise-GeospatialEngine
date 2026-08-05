@@ -104,6 +104,10 @@ def test_run_simulation_composite_shock_mode():
     `ModeloEconomico.simular_multiple()` seguido de
     `run_simulation_engine()` sin excepciones."""
     at = AppTest.from_file(str(_REPO_ROOT / "app/pages/1_Run_Simulation.py"), default_timeout=90)
+    # Bugfix: 1_Run_Simulation.py ahora exige sesion (app/helpers/auth_gate.py).
+    # Sin esto, require_auth() detiene la pagina en el login y el resto del
+    # test (que ejercita el flujo real de simulacion) nunca corre.
+    at.session_state["auth_user"] = {"id": "test-user", "email": "test@lattise.io"}
     at.run()
     assert not at.exception
 
@@ -133,6 +137,10 @@ def test_run_simulation_sensitivity_mode():
     confirmar que el panel de sensibilidad se renderiza con métricas
     numéricas reales (no None/NaN sin manejar)."""
     at = AppTest.from_file(str(_REPO_ROOT / "app/pages/1_Run_Simulation.py"), default_timeout=90)
+    # Bugfix: 1_Run_Simulation.py ahora exige sesion (app/helpers/auth_gate.py).
+    # Sin esto, require_auth() detiene la pagina en el login y el resto del
+    # test (que ejercita el flujo real de simulacion) nunca corre.
+    at.session_state["auth_user"] = {"id": "test-user", "email": "test@lattise.io"}
     at.run()
     assert not at.exception
 
@@ -165,6 +173,10 @@ def test_run_simulation_sensitivity_mode_zero_coverage_sector_does_not_crash():
     mostrar un mensaje claro, no truena con
     `TypeError: unsupported format string passed to NoneType.__format__`."""
     at = AppTest.from_file(str(_REPO_ROOT / "app/pages/1_Run_Simulation.py"), default_timeout=90)
+    # Bugfix: 1_Run_Simulation.py ahora exige sesion (app/helpers/auth_gate.py).
+    # Sin esto, require_auth() detiene la pagina en el login y el resto del
+    # test (que ejercita el flujo real de simulacion) nunca corre.
+    at.session_state["auth_user"] = {"id": "test-user", "email": "test@lattise.io"}
     at.run()
     at.radio(key="toolbar_modo_rho").set_value("📈 Barrido de sensibilidad")
     at.run()
@@ -187,6 +199,10 @@ def test_run_simulation_full_flow_after_decomposition():
     modelo.simular() -> run_simulation_engine() -> scenario_manager ->
     render_result (mapa + KPIs + insights + ranking + export)."""
     at = AppTest.from_file(str(_REPO_ROOT / "app/pages/1_Run_Simulation.py"), default_timeout=90)
+    # Bugfix: 1_Run_Simulation.py ahora exige sesion (app/helpers/auth_gate.py).
+    # Sin esto, require_auth() detiene la pagina en el login y el resto del
+    # test (que ejercita el flujo real de simulacion) nunca corre.
+    at.session_state["auth_user"] = {"id": "test-user", "email": "test@lattise.io"}
     at.run()
     assert not at.exception, f"Carga inicial falló: {at.exception}"
 
@@ -210,6 +226,10 @@ def test_run_simulation_calibration_mode():
     confirmar que el panel de calibración se renderiza con un ρ
     calibrado numérico real."""
     at = AppTest.from_file(str(_REPO_ROOT / "app/pages/1_Run_Simulation.py"), default_timeout=240)
+    # Bugfix: 1_Run_Simulation.py ahora exige sesion (app/helpers/auth_gate.py).
+    # Sin esto, require_auth() detiene la pagina en el login y el resto del
+    # test (que ejercita el flujo real de simulacion) nunca corre.
+    at.session_state["auth_user"] = {"id": "test-user", "email": "test@lattise.io"}
     at.run()
     assert not at.exception
 
@@ -247,6 +267,10 @@ def test_run_simulation_calibration_mode_zero_coverage_sector_does_not_crash():
     producir un resultado de calibración degenerado manejado con
     gracia (convergio=False), nunca una excepción no capturada."""
     at = AppTest.from_file(str(_REPO_ROOT / "app/pages/1_Run_Simulation.py"), default_timeout=240)
+    # Bugfix: 1_Run_Simulation.py ahora exige sesion (app/helpers/auth_gate.py).
+    # Sin esto, require_auth() detiene la pagina en el login y el resto del
+    # test (que ejercita el flujo real de simulacion) nunca corre.
+    at.session_state["auth_user"] = {"id": "test-user", "email": "test@lattise.io"}
     at.run()
 
     radios = [r for r in at.radio if r.label == "¿Cómo definir ρ?"]

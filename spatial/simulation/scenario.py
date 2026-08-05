@@ -241,6 +241,18 @@ class ScenarioResult:
         """Y indexado por cvegeo, en el mismo orden que `sm.ids`."""
         return pd.Series(self.Y, index=self.sm.ids, name="Y")
 
+    def educational_report(self, **kwargs):
+        """Genera el expediente educativo sin volver a ejecutar el motor.
+
+        Los argumentos opcionales se delegan a
+        ``build_educational_report`` (por ejemplo ``rho_method`` o rutas de
+        artefactos específicas de un entorno). Se importa localmente para
+        evitar que el contrato base de Scenario dependa de la capa de salida.
+        """
+        from spatial.simulation.educational_report import build_educational_report
+
+        return build_educational_report(self, **kwargs)
+
 
 # ══════════════════════════════════════════════════════════════════════════
 # Scenario — objeto único de entrada del usuario: estado, sector, monto, rho

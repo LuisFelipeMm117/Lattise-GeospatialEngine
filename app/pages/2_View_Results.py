@@ -34,6 +34,12 @@ st.set_page_config(
     initial_sidebar_state="collapsed",
 )
 
+from app.helpers.auth_gate import render_logout_button, require_auth  # noqa: E402
+from app.panels.educational_report import render_educational_report  # noqa: E402
+
+require_auth()
+render_logout_button()
+
 # ══════════════════════════════════════════════════════════
 # CSS — mismo lenguaje visual que Home.py / Run Simulation
 # ══════════════════════════════════════════════════════════
@@ -339,6 +345,8 @@ with col_side:
 # ══════════════════════════════════════════════════════════
 # DESCARGAS
 # ══════════════════════════════════════════════════════════
+render_educational_report(gdf, report, scenario)
+
 st.markdown('<div class="section-label">Export Results</div>', unsafe_allow_html=True)
 
 dl1, dl2, dl3 = st.columns(3)

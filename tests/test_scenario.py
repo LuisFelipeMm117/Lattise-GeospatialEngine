@@ -18,6 +18,7 @@ tests/test_serio_bridge.py:
 """
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 import geopandas as gpd
@@ -29,6 +30,7 @@ from shapely.geometry import Polygon
 from spatial.allocation.serio_bridge import generate_shock_ageb_from_simulacion
 from spatial.graph.network import SpatialGraphBuilder
 from spatial.simulation.matrix import SpatialMatrix
+from spatial.simulation.educational_report import build_educational_report
 from spatial.simulation.operator import ShockAlignmentError
 from spatial.simulation.scenario import (
     Scenario,
@@ -410,3 +412,63 @@ def test_scenario_report_summary_is_nonempty_string(modelo, sm, warehouse_parque
     assert isinstance(summary, str)
     assert ESTADO_KEY in summary
     assert SECTOR_A in summary
+
+
+def test_educational_report_records_provenance_coverage_warning_and_ranking(
+    modelo, sm, warehouse_parquet, tmp_path,
+):
+    """El reporte educativo solo lee ScenarioResult y conserva su trazabilidad."""
+    result = Scenario(estado=ESTADO_KEY, sector=SECTOR_A, monto=1_000_000.0, rho=0.2).run(
+        modelo, sm,
+        warehouse_parquet=warehouse_parquet,
+        shock_ageb_output=tmp_path / "shock_ageb.parquet",
+    )
+    warehouse_metadata = tmp_path / "metadata.json"
+    graph_gal = tmp_path / "graph.gal"
+    graph_metadata = tmp_path / "graph_metadata.json"
+    crosswalk = tmp_path / "crosswalk.csv"
+    crosswalk_report = tmp_path / "crosswalk_report.json"
+    graph_gal.write_text("fixture", encoding="utf-8")
+    graph_metadata.write_text('{"criterio": "queen"}', encoding="utf-8")
+    crosswalk.write_text("scian_codigo,sector_serio\n111111,111\n", encoding="utf-8")
+    crosswalk_report.write_text("{}", encoding="utf-8")
+
+    educational = build_educational_report(
+        result,
+        rho_method="manual",
+        warehouse_parquet=warehouse_parquet,
+        warehouse_metadata=warehouse_metadata,
+        graph_gal=graph_gal,
+        graph_metadata=graph_metadata,
+        crosswalk_path=crosswalk,
+        crosswalk_report=crosswalk_report,
+        serio_data_dir=SERIO_DATA_PATH,
+        bundle_sha256="a" * 64,
+        top_n=2,
+    )
+
+    assert educational.schema_version == "1.0"
+    assert educational.parameters["metodo_rho"] == "manual"
+    assert educational.parameters["sectores"] == [{"codigo": SECTOR_A, "monto_pesos": 1_000_000.0}]
+    assert educational.artifacts["bundle"]["sha256"] == "a" * 64
+    assert educational.artifacts["warehouse"]["dataset"]["sha256"]
+    assert educational.spatial_coverage["n_agebs_matrix"] == len(sm.ids)
+    assert len(educational.ranking) == 2
+    assert "no una estimación causal" in educational.methodological_warning
+
+    output = tmp_path / "educational_report.json"
+    educational.to_json(output)
+    assert json.loads(output.read_text(encoding="utf-8"))["scenario_fingerprint"] == educational.scenario_fingerprint
+
+    delegated = result.educational_report(
+        warehouse_parquet=warehouse_parquet,
+        warehouse_metadata=warehouse_metadata,
+        graph_gal=graph_gal,
+        graph_metadata=graph_metadata,
+        crosswalk_path=crosswalk,
+        crosswalk_report=crosswalk_report,
+        serio_data_dir=SERIO_DATA_PATH,
+        bundle_sha256="a" * 64,
+        top_n=2,
+    )
+    assert delegated.scenario_fingerprint == educational.scenario_fingerprint

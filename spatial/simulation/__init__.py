@@ -13,5 +13,14 @@ Incremento 1 (este): reconstrucción y validación de la matriz espacial `W`
 a partir de `graph.gal` — `spatial.simulation.matrix.SpatialMatrix`.
 """
 from spatial.simulation.matrix import SpatialMatrix, SpatialMatrixReport, load_gal
+from spatial.simulation.educational_report import (
+    EducationalSimulationReport,
+    build_educational_report,
+    build_educational_report_from_engine_result,
+)
 
-__all__ = ["SpatialMatrix", "SpatialMatrixReport", "load_gal"]
+__all__ = [
+    "SpatialMatrix", "SpatialMatrixReport", "load_gal",
+    "EducationalSimulationReport", "build_educational_report",
+    "build_educational_report_from_engine_result",
+]

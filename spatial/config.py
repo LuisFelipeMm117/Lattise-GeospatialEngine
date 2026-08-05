@@ -4,6 +4,7 @@ Configuración centralizada del Spatial Economic Warehouse (SEW) Engine.
 Single Source of Truth para rutas, CRS y constantes del pipeline.
 Ver: SEW_Engine_Scientific_Specification_v3.pdf, Sección 5 (Design Principles).
 """
+import os
 from pathlib import Path
 
 # ── CRS objetivo (obligatorio en todo el pipeline, Stage 3) ────────────────
@@ -16,7 +17,12 @@ N_SECTORES_SERIO = 78
 # ── Estructura de directorios (Data Contracts, Sección 8) ──────────────────
 BASE_DIR = Path(__file__).resolve().parent.parent
 
-DATA_DIR       = BASE_DIR / "data"
+# Los artefactos congelados pueden vivir fuera de la imagen/contenedor. La
+# estructura esperada conserva ``data/`` y ``serio/data/`` bajo esta raíz.
+# Sin variable se preserva el modo local, con los datos junto al código.
+ARTIFACTS_DIR = Path(os.environ.get("LATTISE_ARTIFACTS_DIR", BASE_DIR)).expanduser()
+
+DATA_DIR       = ARTIFACTS_DIR / "data"
 RAW_DIR        = DATA_DIR / "raw"          # Stage 1 — inmutable
 VALIDATED_DIR  = DATA_DIR / "validated"    # Stage 2 — output de AGEBLoader.validate()
 NORMALIZED_DIR = DATA_DIR / "normalized"   # Stage 3 — output de AGEBLoader.normalize()
@@ -61,7 +67,8 @@ CROSSWALK_MASTER_RAW_CSV = CROSSWALK_RAW_DIR / "Crosswalk_Maestro_SCIAN_SERIO_v0
 
 # Catálogo de los 78 sectores SERIO (código, nombre) — universo S y fuente
 # de la resolución nombre → código usada por la migración del Crosswalk Maestro.
-SERIO_SECTORES_CSV = BASE_DIR / "serio" / "data" / "sectores.csv"
+SERIO_DATA_DIR     = ARTIFACTS_DIR / "serio" / "data"
+SERIO_SECTORES_CSV = SERIO_DATA_DIR / "sectores.csv"
 
 _PIPELINE_DIRS = _PIPELINE_DIRS + (CROSSWALK_DIR, CROSSWALK_RAW_DIR)
 

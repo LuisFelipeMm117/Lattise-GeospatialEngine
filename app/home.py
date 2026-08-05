@@ -4,7 +4,14 @@ Lattise Studio — Home
 Consola de acceso a los módulos de la plataforma. No contiene lógica
 económica ni referencias al motor interno — solo navegación.
 """
+import sys
+from pathlib import Path
+
 import streamlit as st
+
+_REPO_ROOT = Path(__file__).resolve().parents[1]
+if str(_REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(_REPO_ROOT))
 
 st.set_page_config(
     page_title="Lattise Studio",
@@ -12,6 +19,11 @@ st.set_page_config(
     layout="wide",
     initial_sidebar_state="expanded",
 )
+
+from app.helpers.auth_gate import render_logout_button, require_auth  # noqa: E402
+
+require_auth()
+render_logout_button()
 
 # ══════════════════════════════════════════════════════════
 # CSS GLOBAL — consola operativa (Bloomberg Terminal / Palantir Gotham)

@@ -11,6 +11,9 @@ __pycache__/
 venv/
 env/
 
+# Configuración local de Streamlit (puede contener secretos o el bypass de pruebas).
+.streamlit/secrets.toml
+
 # VS Code
 .vscode/
 
@@ -26,6 +29,9 @@ data/raw/
 # Scratch de examples/ — no es un artefacto congelado, se regenera cada
 # vez que se corren los scripts de examples/.
 examples/output/
+
+# Bundles de release generados localmente; se publican en R2/CDN, no en Git.
+dist/
 
 # NOTA para quien decida versionar o no los artefactos congelados
 # (data/warehouse/warehouse.parquet, data/graph/graph.gal,

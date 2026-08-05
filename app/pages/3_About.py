@@ -28,6 +28,11 @@ st.set_page_config(
     layout="wide",
     initial_sidebar_state="expanded",
 )
+
+from app.helpers.auth_gate import render_logout_button, require_auth  # noqa: E402
+
+require_auth()
+render_logout_button()
 inject_styles()
 
 # ======================================================================

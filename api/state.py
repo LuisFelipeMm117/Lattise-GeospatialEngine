@@ -37,6 +37,7 @@ from spatial.config import (  # noqa: E402
     DATA_DIR,
     GRAPH_GAL_PATH,
     GRAPH_METADATA_JSON,
+    SERIO_DATA_DIR,
     SERIO_SECTORES_CSV,
     WAREHOUSE_PARQUET,
 )
@@ -52,9 +53,6 @@ except ImportError:  # pragma: no cover
     SpatialMatrix = None  # type: ignore[assignment,misc]
 
 SECTOR_CLUSTER_JSON = DATA_DIR / "analytics" / "sector_cluster.json"
-SERIO_DATA_DIR = _REPO_ROOT / "serio" / "data"
-
-
 class EngineState:
     """Carga perezosa (una sola vez por instancia) de los artefactos
     congelados que necesita la API. Cada propiedad se calcula al primer

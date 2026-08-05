@@ -1,0 +1,40 @@
+# Dockerfile.studio — Lattise Studio (Streamlit), servicio separado de la API.
+#
+# Por qué un Dockerfile aparte del de `api/`: son dos procesos con
+# necesidades de recursos muy distintas (medido: ~280 MB RSS por una
+# sola simulación de un solo estado en Lattise Studio, contra unos
+# pocos MB por request en la API). Se despliegan como dos servicios
+# distintos dentro del mismo proyecto de Railway, cada uno con su
+# propio límite de RAM.
+#
+# Build:  docker build -f Dockerfile.studio -t lattise-studio .
+# Run:    docker run -p 8501:8501 -e PORT=8501 \
+#           -e SUPABASE_URL=... -e SUPABASE_ANON_KEY=... lattise-studio
+
+FROM python:3.12-slim
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        gdal-bin \
+        libgdal-dev \
+        libgeos-dev \
+        libproj-dev \
+        build-essential \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+COPY app/ ./app/
+COPY spatial/ ./spatial/
+COPY serio/ ./serio/
+COPY data/ ./data/
+COPY .streamlit/ ./.streamlit/
+
+ENV PYTHONUNBUFFERED=1 \
+    PORT=8501
+
+EXPOSE 8501
+
+CMD ["sh", "-c", "streamlit run app/home.py --server.port=${PORT:-8501} --server.address=0.0.0.0 --server.headless=true"]

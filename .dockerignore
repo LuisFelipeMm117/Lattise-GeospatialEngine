@@ -5,10 +5,13 @@
 app/
 tests/
 examples/
-scripts/
 *.md
 __pycache__
 *.pyc
 .pytest_cache
 .venv
 venv/
+
+# Los artefactos de ejecución se descargan como bundle verificado al arrancar.
+data/
+serio/data/

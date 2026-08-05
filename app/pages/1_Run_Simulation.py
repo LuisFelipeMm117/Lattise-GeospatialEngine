@@ -53,6 +53,7 @@ from app.helpers.scenario_manager import (  # noqa: E402
     render_scenario_manager,
 )
 from app.helpers.scenario_paths import scoped_shock_ageb_path  # noqa: E402
+from app.helpers.auth_gate import render_logout_button, require_auth  # noqa: E402
 from app.panels.simulation_calibration import render_calibration_summary  # noqa: E402
 from app.panels.simulation_comparison import render_compare_view  # noqa: E402
 from app.panels.simulation_result import render_empty_state, render_result  # noqa: E402
@@ -64,6 +65,8 @@ st.set_page_config(
     layout="wide",
     initial_sidebar_state="collapsed",
 )
+require_auth()
+render_logout_button()
 inject_simulation_styles()
 
 
