@@ -534,7 +534,7 @@ class CommunityLayer(LayerBase):
             sub = gdf[gdf["cluster_id"] == cid]
             sub_geo = json.loads(sub.to_json())
             sel = ctx.selection.get(self.id)
-            traces.append(go.Choroplethmapbox(
+            traces.append(go.Choroplethmap(
                 geojson=sub_geo, locations=sub.index, z=[1] * len(sub),
                 colorscale=[[0, ctx.color_by_cluster[cid]], [1, ctx.color_by_cluster[cid]]],
                 showscale=False,
@@ -637,7 +637,7 @@ class PropagationLayer(LayerBase):
             sim_wgs = sim
         sim_geo = json.loads(sim_wgs.to_json())
         vmin, vmax = float(sim_wgs[col].min()), float(sim_wgs[col].max())
-        trace = go.Choroplethmapbox(
+        trace = go.Choroplethmap(
             geojson=sim_geo, locations=sim_wgs.index, z=sim_wgs[col],
             colorscale="Turbo", marker_opacity=0.82, marker_line_width=0.2,
             customdata=sim_wgs[[AGEB_ID_COL]].assign(_m=sim_wgs[AGEB_ID_COL].map(_municipio_code))[[AGEB_ID_COL, "_m"]].values,
@@ -720,7 +720,7 @@ class ImpactLayer(LayerBase):
             sim_wgs = sim
         sim_geo = json.loads(sim_wgs.to_json())
         vmin, vmax = float(sim_wgs[col].min()), float(sim_wgs[col].max())
-        trace = go.Choroplethmapbox(
+        trace = go.Choroplethmap(
             geojson=sim_geo, locations=sim_wgs.index, z=sim_wgs[col],
             colorscale="Sunset", marker_opacity=0.82, marker_line_width=0.2,
             customdata=sim_wgs[[AGEB_ID_COL]].assign(_m=sim_wgs[AGEB_ID_COL].map(_municipio_code))[[AGEB_ID_COL, "_m"]].values,
@@ -801,7 +801,7 @@ class MunicipalityLayer(LayerBase):
                 sub = gdf[gdf["cluster_dominante"] == cid]
                 sub_geo = json.loads(sub.to_json())
                 color = ctx.color_by_cluster.get(int(cid), "#576073")
-                traces.append(go.Choroplethmapbox(
+                traces.append(go.Choroplethmap(
                     geojson=sub_geo, locations=sub.index, z=[1] * len(sub),
                     colorscale=[[0, color], [1, color]], showscale=False,
                     marker_opacity=0.85 if (sel is None or sel in sub["municipio"].values) else 0.3,
@@ -815,7 +815,7 @@ class MunicipalityLayer(LayerBase):
         else:
             vmin, vmax = float(gdf[variable_key].min()), float(gdf[variable_key].max())
             geo = json.loads(gdf.to_json())
-            traces.append(go.Choroplethmapbox(
+            traces.append(go.Choroplethmap(
                 geojson=geo, locations=gdf.index, z=gdf[variable_key],
                 colorscale="Blues", marker_opacity=0.85, marker_line_width=0.3,
                 customdata=gdf[["municipio"]].values,
@@ -894,7 +894,7 @@ class OpportunityLayer(LayerBase):
         gdf = ctx.opp_gdf_wgs84
         geo = json.loads(gdf.to_json())
         vmin, vmax = 0.0, 1.0
-        trace = go.Choroplethmapbox(
+        trace = go.Choroplethmap(
             geojson=geo, locations=gdf.index, z=gdf["opportunity_score"],
             colorscale=[[0, "#576073"], [0.5, "#F5B942"], [1, "#34D399"]],
             zmin=0, zmax=1, marker_opacity=0.85, marker_line_width=0.2,
@@ -1171,8 +1171,8 @@ with col_map:
         centroid = ageb_gdf_wgs84.geometry.union_all().centroid
         fig = go.Figure(data=trace_spec.traces)
         fig.update_layout(
-            mapbox_style="carto-darkmatter", mapbox_zoom=8.2,
-            mapbox_center={"lat": centroid.y, "lon": centroid.x},
+            map_style="carto-darkmatter", map_zoom=8.2,
+            map_center={"lat": centroid.y, "lon": centroid.x},
             margin=dict(l=0, r=0, t=0, b=0), height=600,
             paper_bgcolor="#0B0F17", plot_bgcolor="#0B0F17",
             font=dict(family="Inter", color="#F4F5F7", size=11),

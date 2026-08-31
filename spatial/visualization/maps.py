@@ -434,7 +434,7 @@ def build_dashboard_layer(
 ) -> tuple[dict, VisualizationReport]:
     """
     Prepara, en memoria (sin escribir a disco), la estructura que
-    consume un panel interactivo (p. ej. `px.choropleth_mapbox` en la
+    consume un panel interactivo (p. ej. `px.choropleth_map` en la
     capa de aplicación Streamlit): un `FeatureCollection` GeoJSON en
     EPSG:4326 indexado por `id_col`, el diccionario `{id: valor}` de
     `value_col` y estadísticos básicos — para que la capa de

@@ -43,9 +43,9 @@ def render_compare_map(gdf, sector_label: str, key_suffix: str):
     geojson = json.loads(gdf_wgs84.to_json())
     centroid = gdf_wgs84.geometry.union_all().centroid
 
-    fig = px.choropleth_mapbox(
+    fig = px.choropleth_map(
         gdf_wgs84, geojson=geojson, locations=gdf_wgs84.index,
-        mapbox_style="carto-darkmatter", zoom=6.5,
+        map_style="carto-darkmatter", zoom=6.5,
         center={"lat": centroid.y, "lon": centroid.x},
         opacity=0.80, color=value_col, color_continuous_scale="Blues",
     )

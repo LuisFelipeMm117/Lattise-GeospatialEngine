@@ -11,7 +11,9 @@ matplotlib>=3.8.0
  
 # ── Lattise Studio (app/) — capa de aplicación sobre el motor ──────────────
 streamlit>=1.35.0
-plotly>=5.0
+# MapLibre APIs (px.choropleth_map / go.Choroplethmap) were introduced in 5.24
+# and replace the removed Mapbox APIs in Plotly 7.
+plotly>=5.24
 networkx>=3.0
 python-louvain>=0.16
 
@@ -29,4 +31,3 @@ supabase>=2.5.0
  
 # ── Testing ──────────────────────────────────────────────────────────────
 pytest>=8.0.0
- 

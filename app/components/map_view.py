@@ -4,7 +4,7 @@ Opportunity Explorer — Capa 2 (Mapa).
 
 Reutiliza el `GeoDataFrame` ya construido por `app.helpers.aggregation`
 (`ageb_gdf` / `muni_gdf`). No recalcula nada — solo agrega capas
-visuales (Choroplethmapbox) sobre columnas ya existentes, con el mismo
+visuales (Choroplethmap) sobre columnas ya existentes, con el mismo
 criterio de "un trace por categoría" que ya usa
 `app/pages/4_Spatial_Cluster_Intelligence.py` (`CommunityLayer`,
 `MunicipalityLayer`) para que la leyenda categórica sea legible.
@@ -56,7 +56,7 @@ def _community_traces(ctx: SimpleNamespace, gdf: gpd.GeoDataFrame) -> tuple[list
         sub_geo = json.loads(sub.to_json())
         sel = st.session_state.get("oe_selected_ageb")
         is_dim = sub[AGEB_ID_COL].isin(ctx.dimmed_ids).all() if ctx.dimmed_ids else False
-        traces.append(go.Choroplethmapbox(
+        traces.append(go.Choroplethmap(
             geojson=sub_geo, locations=sub.index, z=[1] * len(sub),
             colorscale=[[0, ctx.color_by_cluster.get(cid, "#576073")], [1, ctx.color_by_cluster.get(cid, "#576073")]],
             showscale=False,
@@ -86,7 +86,7 @@ def _sector_traces(gdf: gpd.GeoDataFrame) -> tuple[list, str]:
         sub = gdf[gdf["_bucket"] == bucket]
         sub_geo = json.loads(sub.to_json())
         color = "#576073" if bucket == "Otros" else color_for_hash(bucket)
-        traces.append(go.Choroplethmapbox(
+        traces.append(go.Choroplethmap(
             geojson=sub_geo, locations=sub.index, z=[1] * len(sub),
             colorscale=[[0, color], [1, color]], showscale=False,
             marker_opacity=0.85, marker_line_width=0.2, marker_line_color="#0B0F17",
@@ -100,7 +100,7 @@ def _sector_traces(gdf: gpd.GeoDataFrame) -> tuple[list, str]:
 def _weight_traces(gdf: gpd.GeoDataFrame) -> tuple[list, str]:
     vmin, vmax = float(gdf["peso_total_ageb"].min()), float(gdf["peso_total_ageb"].max())
     geo = json.loads(gdf.to_json())
-    trace = go.Choroplethmapbox(
+    trace = go.Choroplethmap(
         geojson=geo, locations=gdf.index, z=gdf["peso_total_ageb"],
         colorscale="Blues", marker_opacity=0.85, marker_line_width=0.2,
         customdata=gdf[[AGEB_ID_COL]].values,
@@ -113,7 +113,7 @@ def _weight_traces(gdf: gpd.GeoDataFrame) -> tuple[list, str]:
 def _impact_traces(gdf: gpd.GeoDataFrame) -> tuple[list, str]:
     vmin, vmax = float(gdf[IMPACTO_PROPAGADO_COL].min()), float(gdf[IMPACTO_PROPAGADO_COL].max())
     geo = json.loads(gdf.to_json())
-    trace = go.Choroplethmapbox(
+    trace = go.Choroplethmap(
         geojson=geo, locations=gdf.index, z=gdf[IMPACTO_PROPAGADO_COL],
         colorscale="Turbo", marker_opacity=0.85, marker_line_width=0.2,
         customdata=gdf[[AGEB_ID_COL]].values,
@@ -130,7 +130,7 @@ def _municipality_traces(ctx: SimpleNamespace, muni_gdf: gpd.GeoDataFrame) -> tu
         sub = muni_gdf[muni_gdf["cluster_dominante"] == cid]
         sub_geo = json.loads(sub.to_json())
         color = ctx.color_by_cluster.get(int(cid), "#576073")
-        traces.append(go.Choroplethmapbox(
+        traces.append(go.Choroplethmap(
             geojson=sub_geo, locations=sub.index, z=[1] * len(sub),
             colorscale=[[0, color], [1, color]], showscale=False,
             marker_opacity=0.85, marker_line_width=0.4, marker_line_color="#0B0F17",
@@ -181,8 +181,8 @@ def render_map(ctx: SimpleNamespace) -> None:
     centroid = ctx.ageb_gdf_wgs84.geometry.union_all().centroid
     fig = go.Figure(data=traces)
     fig.update_layout(
-        mapbox_style="carto-darkmatter", mapbox_zoom=8.2,
-        mapbox_center={"lat": centroid.y, "lon": centroid.x},
+        map_style="carto-darkmatter", map_zoom=8.2,
+        map_center={"lat": centroid.y, "lon": centroid.x},
         margin=dict(l=0, r=0, t=0, b=0), height=600,
         paper_bgcolor="#0B0F17", plot_bgcolor="#0B0F17",
         font=dict(family="Inter", color="#F4F5F7", size=11),

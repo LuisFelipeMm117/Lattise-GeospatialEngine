@@ -100,11 +100,13 @@ def render_map_block(gdf, sector_label: str):
 
     color_kwargs = dict(color=value_col, color_continuous_scale=color_label) if layer_on else dict()
 
-    fig = px.choropleth_mapbox(
+    # Plotly 7 removed the legacy Mapbox API.  ``choropleth_map`` uses
+    # MapLibre and has the same GeoJSON/location semantics.
+    fig = px.choropleth_map(
         gdf_wgs84,
         geojson=geojson,
         locations=gdf_wgs84.index,
-        mapbox_style=basemap_style,
+        map_style=basemap_style,
         zoom=8,
         center={"lat": centroid.y, "lon": centroid.x},
         opacity=0.80 if layer_on else 0.35,
@@ -146,19 +148,19 @@ def render_map_block(gdf, sector_label: str):
         if sel_mask.any():
             sel_geom = gdf_wgs84.loc[sel_mask, "geometry"].iloc[0]
             sel_centroid = sel_geom.centroid
-            fig.add_trace(go.Scattermapbox(
+            fig.add_trace(go.Scattermap(
                 lat=[sel_centroid.y], lon=[sel_centroid.x],
                 mode="markers",
                 marker=dict(size=26, color="rgba(244,245,247,0.0)"),
                 hoverinfo="skip", showlegend=False,
             ))
-            fig.add_trace(go.Scattermapbox(
+            fig.add_trace(go.Scattermap(
                 lat=[sel_centroid.y], lon=[sel_centroid.x],
                 mode="markers",
                 marker=dict(size=20, color="#F4F5F7", opacity=0.9),
                 hoverinfo="skip", showlegend=False,
             ))
-            fig.add_trace(go.Scattermapbox(
+            fig.add_trace(go.Scattermap(
                 lat=[sel_centroid.y], lon=[sel_centroid.x],
                 mode="markers",
                 marker=dict(size=12, color="#F5B942"),
@@ -303,4 +305,3 @@ def render_detail_panel(gdf_map, value_col: str, var_label: str):
     if st.button("✕ Clear selection", key="clear_selection_btn"):
         st.session_state["selected_ageb_id"] = None
         st.rerun()
-

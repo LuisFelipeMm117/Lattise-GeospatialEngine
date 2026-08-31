@@ -255,13 +255,13 @@ with col_map:
         geojson = json.loads(gdf_wgs84.to_json())
         centroid = gdf_wgs84.geometry.union_all().centroid
 
-        fig = px.choropleth_mapbox(
+        fig = px.choropleth_map(
             gdf_wgs84,
             geojson=geojson,
             locations=gdf_wgs84.index,
             color=IMPACTO_PROPAGADO_COL,
             color_continuous_scale="Blues",
-            mapbox_style="carto-darkmatter",
+            map_style="carto-darkmatter",
             zoom=8,
             center={"lat": centroid.y, "lon": centroid.x},
             opacity=0.75,
